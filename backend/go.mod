@@ -1,3 +1,3 @@
-module github.com/nuthanan06/backend
+module github.com/roomtastic/backend
 
 go 1.25.5

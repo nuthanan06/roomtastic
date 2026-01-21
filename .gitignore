@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+venv/
+ENV/
+env/
+.venv
+
+# Node
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+temp/
+*.jpg
+*.png
+depth_cache/
+uploads/
+
+# Go
+*.exe
+*.dll
+*.dylib
+*.test
+*.out
+
+# Environment
+.env
+.env.local

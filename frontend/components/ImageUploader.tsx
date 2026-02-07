@@ -127,7 +127,13 @@ export const ImageUploader: React.FC = () => {
     setError(null);
 
     try {
-      const response = await axios.post('http://localhost:8080/api/process-url', { url });
+      // Ensure URL has protocol
+      let processUrl = url.trim();
+      if (!processUrl.startsWith('http://') && !processUrl.startsWith('https://')) {
+        processUrl = 'https://' + processUrl;
+      }
+
+      const response = await axios.post('http://localhost:8080/api/process-url', { url: processUrl });
 
       if (response.data.success) {
         setProcessedData({
@@ -138,7 +144,9 @@ export const ImageUploader: React.FC = () => {
         setError(response.data.error || 'Processing failed');
       }
     } catch (err) {
+      console.error('URL processing error:', err);
       if (axios.isAxiosError(err)) {
+        console.error('Axios error response:', err.response);
         setError(`Error: ${err.response?.data?.error || err.message}`);
       } else {
         setError('An error occurred during processing');

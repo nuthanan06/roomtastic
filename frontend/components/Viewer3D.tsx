@@ -100,9 +100,9 @@ export const Viewer3D: React.FC<ViewerProps> = ({ originalImage, depthMap, backI
           camera.updateProjectionMatrix();
 
           cleanupAndFinish();
-        } catch (e: any) {
+        } catch (e) {
           console.warn('GLB load failed', e);
-          if (mounted) setError(String(e.message || e));
+          if (mounted) setError(e instanceof Error ? e.message : String(e));
           cleanupAndFinish();
         }
       };
@@ -202,9 +202,9 @@ export const Viewer3D: React.FC<ViewerProps> = ({ originalImage, depthMap, backI
           }
 
           cleanupAndFinish();
-        } catch (err: any) {
+        } catch (err) {
           console.warn('Texture mesh failed', err);
-          if (mounted) setError(String(err.message || err));
+          if (mounted) setError(err instanceof Error ? err.message : String(err));
           cleanupAndFinish();
         }
       };

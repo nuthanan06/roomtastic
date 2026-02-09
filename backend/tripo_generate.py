@@ -19,13 +19,32 @@ async def run(input_path: str, output_dir: str, prompt: str | None):
     os.makedirs(output_dir, exist_ok=True)
 
     async with TripoClient(api_key=api_key) as client:
-        # Build a prompt; include filename context if no explicit prompt
-        prompt_text = prompt or f"Convert the provided product photo at {os.path.basename(input_path)} into a high-quality 3D model."
+        # Build a prompt; include filename context if no explicit prompt.
+        # Always append strict constraints to avoid generating people/characters.
+        base_prompt = prompt or (
+            f"Convert the provided product photo at {os.path.basename(input_path)} into a high-quality, production-ready 3D model."
+        )
+
+        # Strong constraints to prevent person/character generation and to request clean, inanimate product output
+        enforced_constraints = (
+            " Only model the inanimate object shown in the photo. Do NOT generate or include any people, faces, heads, limbs, clothing, or characters. "
+            "Produce a single centered, watertight mesh suitable for product rendering, with correct proportions and clean topology. "
+            "Provide PBR-style textures (albedo, normal, roughness) where applicable. Remove background and extraneous items. "
+            "Orient the object on a neutral ground plane (turntable-ready). High detail, realistic materials, no watermark, no text."
+        )
+
+        prompt_text = base_prompt.strip() + "\n" + enforced_constraints.strip()
+
+        # Negative prompts to further discourage unwanted outputs (people, artifacts, low quality)
+        negative_prompt = (
+            "person, people, human, face, head, torso, limb, character, cartoon, avatar,"
+            " low quality, blurry, distorted, deformed, artifact, text, watermark"
+        )
 
         try:
             task_id = await client.text_to_model(
                 prompt=prompt_text,
-                negative_prompt="low quality, blurry",
+                negative_prompt=negative_prompt,
             )
         except Exception as e:
             print(json.dumps({"error": f"Failed to create task: {e}"}))

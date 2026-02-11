@@ -34,7 +34,6 @@ interface ProductDimensions {
 export const ImageUploader: React.FC = () => {
   // Step state: 0 = upload, 1 = orthographic, 2 = depth, 3 = 3D
   const [processedFile, setProcessedFile] = useState<File | null>(null);
-  // Step state: 0 = upload, 1 = orthographic, 2 = depth, 3 = 3D
   const [step, setStep] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -77,6 +76,7 @@ export const ImageUploader: React.FC = () => {
     setError(null);
     try {
       const formData = new FormData();
+      formData.append('image', file);
       formData.append('image', file);
       formData.append('width', String(dimensions.width));
       formData.append('depth', String(dimensions.depth));
@@ -440,7 +440,6 @@ export const ImageUploader: React.FC = () => {
                 </div>
               )}
 
-              {/* Primary: Generate via Tripo */}
             </>
           ) : (
             <>

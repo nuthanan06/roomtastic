@@ -49,7 +49,7 @@ def test_upload_image_to_3D_pipeline():
 def test_if_done():
     meshy = MeshyHelper(name="test", description="test run", image_url="")
 
-    newShit = meshy.get_image_to_3d("019c4a22-ac70-7dc4-bb7a-90694162739f")
+    newShit = meshy.get_image_to_3d("id019c4b14-4a45-71fe-80e5-6cb21b226212")
     print("Meshy task JSON:")
     try:
         print(json.dumps(newShit, indent=2, ensure_ascii=False))

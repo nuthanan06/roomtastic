@@ -87,11 +87,17 @@ class MeshyHelper:
         except requests.HTTPError as e:
             raise RuntimeError(f"Meshy create task failed: {e} - {resp.text}")
 
+        # According to Meshy docs the response contains: { "result": "<task-id>" }
         data = resp.json()
-        task_id = data.get("result") or data.get("id")
-        if not task_id:
-            raise RuntimeError(f"Unexpected create response: {data}")
-        print("this is the new task id" + task_id)
+        task_id = data.get("result")
+        if not isinstance(task_id, str) or task_id.strip() == "":
+            # defensive fallback: also accept top-level id field
+            task_id = data.get("id")
+        if not isinstance(task_id, str) or task_id.strip() == "":
+            raise RuntimeError(f"Unexpected create response (missing result/id): {data}")
+        task_id = task_id.strip()
+        # Return the task id string as provided by the API (do not mutate format)
+        print("this is the new task id", task_id)
         return task_id
 
     def get_image_to_3d(self, task_id: str) -> Dict[str, Any]:
@@ -123,7 +129,13 @@ class MeshyHelper:
             status = status.upper() if isinstance(status, str) else status
 
             # Try to extract glb URL if present
-            model_urls = data.get("model_urls") or data.get("result", {}).get("model_urls") if isinstance(data.get("result"), dict) else data.get("model_urls")
+            # Per docs, the GET returns a top-level `model_urls` object. Accept that first,
+            # then fall back to `result.model_urls` if present for compatibility.
+            model_urls = None
+            if isinstance(data, dict):
+                model_urls = data.get("model_urls")
+                if not model_urls and isinstance(data.get("result"), dict):
+                    model_urls = data.get("result", {}).get("model_urls")
             if model_urls:
                 glb = model_urls.get("glb") or model_urls.get("model.glb")
                 if glb:

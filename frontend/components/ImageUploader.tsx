@@ -24,12 +24,6 @@ interface DepthMaps {
   bottom: string;
 }
 
-interface ProcessedData {
-  originalImage: string;
-  depthMap: string;
-}
-
-
 interface ProductDimensions {
   width: number;
   depth: number;
@@ -40,9 +34,11 @@ interface ProductDimensions {
 export const ImageUploader: React.FC = () => {
   // Step state: 0 = upload, 1 = orthographic, 2 = depth, 3 = 3D
   const [processedFile, setProcessedFile] = useState<File | null>(null);
+  // Step state: 0 = upload, 1 = orthographic, 2 = depth, 3 = 3D
   const [step, setStep] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [processedData, setProcessedData] = useState<{ originalImage: string; depthMap: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orthographicViews, setOrthographicViews] = useState<OrthographicViews | null>(null);
@@ -55,7 +51,6 @@ export const ImageUploader: React.FC = () => {
     depth: 5.5,
     height: 13,
   });
-  const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
   const [inputMode, setInputMode] = useState<'file' | 'url'>('file');
   const [url, setUrl] = useState<string>('');
 
@@ -87,26 +82,87 @@ export const ImageUploader: React.FC = () => {
       formData.append('depth', String(dimensions.depth));
       formData.append('height', String(dimensions.height));
 
-      const response = await axios.post('http://localhost:8080/api/process-image', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+      const response = await axios.post('http://localhost:8080/api/process-3d', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      if (response.data.success) {
-        setProcessedData({
-          originalImage: response.data.originalImage,
-          depthMap: response.data.depthMap,
+      if (response.data && response.data.success) {
+        const views = response.data.views || {};
+        const depths = response.data.depths || {};
+        setOrthographicViews({
+          front: views.front,
+          back: views.back,
+          left: views.left,
+          right: views.right,
+          top: views.top,
+          bottom: views.bottom,
         });
+        setDepthMaps({
+          front: depths.front,
+          back: depths.back,
+          left: depths.left,
+          right: depths.right,
+          top: depths.top,
+          bottom: depths.bottom,
+        });
+        if (response.data.mergedPly) {
+          setMergedPly(response.data.mergedPly);
+        }
+        // Show 3D model immediately
+        setStep(4);
       } else {
-        setError(response.data.error || 'Processing failed');
+        setError(response.data.error || 'Failed to generate orthographic views');
       }
-    } catch (err) {
-      if (axios.isAxiosError(err)) {
-        setError(`Error: ${err.response?.data?.error || err.message}`);
-      } else {
-        setError('An error occurred during processing');
+    } catch (e) {
+      console.error(e);
+      setError('Failed to generate orthographic views');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Step 2: Generate depth maps for all six orientations, then normalize points (future step)
+  const generateDepthMaps = async () => {
+    // If depth maps already present (returned by process-3d), just proceed
+    if (depthMaps) {
+      setStep(3);
+      return;
+    }
+    if (!orthographicViews) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const keys = Object.keys(orthographicViews) as (keyof OrthographicViews)[];
+      const depthResults: Partial<DepthMaps> = {};
+      for (const key of keys) {
+        const base64 = orthographicViews[key];
+        let blob: Blob;
+        if (base64.startsWith('data:')) {
+          const res = await fetch(base64);
+          blob = await res.blob();
+        } else {
+          blob = new Blob([base64], { type: 'image/png' });
+        }
+        const formData = new FormData();
+        formData.append('image', blob, `${key}.png`);
+        formData.append('width', String(dimensions.width));
+        formData.append('depth', String(dimensions.depth));
+        formData.append('height', String(dimensions.height));
+        const response = await axios.post('http://localhost:8080/api/process-image', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        if (response.data.success) {
+          depthResults[key] = response.data.depthMap;
+        } else {
+          throw new Error(response.data.error || 'Processing failed');
+        }
       }
+      // TODO: Normalize all points from all six depth maps for a unified 3D model
+      setDepthMaps(depthResults as DepthMaps);
+      setStep(3);
+    } catch (e) {
+      console.error(e);
+      setError('Failed to generate depth maps');
     } finally {
       setIsLoading(false);
     }
@@ -123,13 +179,7 @@ export const ImageUploader: React.FC = () => {
     setError(null);
 
     try {
-      // Ensure URL has protocol
-      let processUrl = url.trim();
-      if (!processUrl.startsWith('http://') && !processUrl.startsWith('https://')) {
-        processUrl = 'https://' + processUrl;
-      }
-
-      const response = await axios.post('http://localhost:8080/api/process-url', { url: processUrl });
+      const response = await axios.post('http://localhost:8080/api/process-url', { url });
 
       if (response.data.success) {
         setProcessedData({
@@ -140,9 +190,7 @@ export const ImageUploader: React.FC = () => {
         setError(response.data.error || 'Processing failed');
       }
     } catch (err) {
-      console.error('URL processing error:', err);
       if (axios.isAxiosError(err)) {
-        console.error('Axios error response:', err.response);
         setError(`Error: ${err.response?.data?.error || err.message}`);
       } else {
         setError('An error occurred during processing');
@@ -171,6 +219,12 @@ export const ImageUploader: React.FC = () => {
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
           >
             ← Back to Upload
+          </button>
+          <button
+            onClick={generateDepthMaps}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
+          >
+            Next: Depth Maps →
           </button>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center">
@@ -279,41 +333,6 @@ export const ImageUploader: React.FC = () => {
   return (
     <div className="min-h-screen bg-linear-to-br from-gray-900 to-gray-800 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-gray-800 rounded-lg shadow-2xl p-8 border border-gray-700">
-        <h1 className="text-3xl font-bold text-white mb-2">Roomtastic</h1>
-        <p className="text-gray-400 mb-6">Convert 2D images to 3D models</p>
-
-        {/* Toggle between File and URL modes */}
-        <div className="flex gap-2 mb-6">
-          <button
-            onClick={() => {
-              setInputMode('file');
-              setUrl('');
-              setError(null);
-            }}
-            className={`flex-1 py-2 px-4 rounded font-medium transition ${
-              inputMode === 'file'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            Upload File
-          </button>
-          <button
-            onClick={() => {
-              setInputMode('url');
-              setFile(null);
-              setPreview(null);
-              setError(null);
-            }}
-            className={`flex-1 py-2 px-4 rounded font-medium transition ${
-              inputMode === 'url'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            Paste URL
-          </button>
-        </div>
         <h1 className="text-3xl font-bold text-white mb-2">3D Model Pipeline</h1>
         <p className="text-gray-400 mb-6">Step 1: Upload an image to generate orthographic views, depth maps, and a 3D model</p>
 
@@ -376,43 +395,43 @@ export const ImageUploader: React.FC = () => {
                 </label>
               </div>
 
-              {/* Dimensions Input */}
-              <div className="bg-gray-700 rounded-lg p-4 space-y-2">
-                <p className="text-sm font-medium text-gray-300">Product Dimensions (cm)</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="text-xs text-gray-400">Width</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={dimensions.width}
-                      onChange={(e) => setDimensions({ ...dimensions, width: parseFloat(e.target.value) || 0 })}
-                      className="w-full bg-gray-600 text-white rounded px-2 py-1 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400">Depth</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={dimensions.depth}
-                      onChange={(e) => setDimensions({ ...dimensions, depth: parseFloat(e.target.value) || 0 })}
-                      className="w-full bg-gray-600 text-white rounded px-2 py-1 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400">Height</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={dimensions.height}
-                      onChange={(e) => setDimensions({ ...dimensions, height: parseFloat(e.target.value) || 0 })}
-                      className="w-full bg-gray-600 text-white rounded px-2 py-1 text-sm"
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500">From Amazon product listing</p>
+          {/* Dimensions Input */}
+          <div className="bg-gray-700 rounded-lg p-4 space-y-2">
+            <p className="text-sm font-medium text-gray-300">Product Dimensions (cm)</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-xs text-gray-400">Width</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={dimensions.width}
+                  onChange={(e) => setDimensions({ ...dimensions, width: parseFloat(e.target.value) || 0 })}
+                  className="w-full bg-gray-600 text-white rounded px-2 py-1 text-sm"
+                />
               </div>
+              <div>
+                <label className="text-xs text-gray-400">Depth</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={dimensions.depth}
+                  onChange={(e) => setDimensions({ ...dimensions, depth: parseFloat(e.target.value) || 0 })}
+                  className="w-full bg-gray-600 text-white rounded px-2 py-1 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400">Height</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={dimensions.height}
+                  onChange={(e) => setDimensions({ ...dimensions, height: parseFloat(e.target.value) || 0 })}
+                  className="w-full bg-gray-600 text-white rounded px-2 py-1 text-sm"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-500">From Amazon product listing</p>
+          </div>
 
               {/* Error Message */}
               {error && (
@@ -421,14 +440,7 @@ export const ImageUploader: React.FC = () => {
                 </div>
               )}
 
-              {/* Submit Button */}
-              <button
-                onClick={handleUpload}
-                disabled={!file || isLoading}
-                className="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                {isLoading ? 'Processing... (this may take a minute)' : 'Process Image'}
-              </button>
+              {/* Primary: Generate via Tripo */}
             </>
           ) : (
             <>
@@ -466,6 +478,7 @@ export const ImageUploader: React.FC = () => {
 
           {/* Info Text */}
           <p className="text-xs text-gray-500 text-center mt-4">
+            Enter product dimensions to accurately scale the 3D model. Uses MiDaS depth estimation.
             Enter product dimensions to accurately scale the 3D model. Uses MiDaS depth estimation.
           </p>
         </div>

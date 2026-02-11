@@ -24,6 +24,21 @@ interface DepthMaps {
   bottom: string;
 }
 
+interface ProcessedData {
+  originalImage: string;
+  depthMap: string;
+}
+
+
+interface DepthMaps {
+  front: string;
+  back: string;
+  left: string;
+  right: string;
+  top: string;
+  bottom: string;
+}
+
 interface ProductDimensions {
   width: number;
   depth: number;
@@ -37,7 +52,7 @@ export const ImageUploader: React.FC = () => {
   const [step, setStep] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [processedData, setProcessedData] = useState<{ originalImage: string; depthMap: string } | null>(null);
+  const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orthographicViews, setOrthographicViews] = useState<OrthographicViews | null>(null);
@@ -167,7 +182,6 @@ export const ImageUploader: React.FC = () => {
       setIsLoading(false);
     }
   };
-
 
   const handleUrlSubmit = async () => {
     if (!url.trim()) {
@@ -485,6 +499,3 @@ export const ImageUploader: React.FC = () => {
     </div>
   );
 };
-
-
-

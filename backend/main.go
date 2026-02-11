@@ -293,6 +293,22 @@ func process3DPipeline(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func processing3DPipelinewMeshyAttempt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	err := r.ParseMultipartForm(200 << 20)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, `{"success":false,"error":"Failed to parse form: %v"}` , err)
+		return
+	}
+	
+	file, _, err := r.FormFile("image")
+}
 // tripoHandler calls the Python Tripo wrapper to generate a 3D model from an uploaded image
 func tripoHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

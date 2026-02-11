@@ -7,9 +7,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/rs/cors"
@@ -293,20 +295,8 @@ func process3DPipeline(w http.ResponseWriter, r *http.Request) {
 }
 
 func processing3DPipelinewMeshyAttempt(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	
-	w.Header().Set("Content-Type", "application/json")
-	err := r.ParseMultipartForm(200 << 20)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, `{"success":false,"error":"Failed to parse form: %v"}` , err)
-		return
-	}
-	
-	file, _, err := r.FormFile("image")
+	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	return
 }
 // tripoHandler calls the Python Tripo wrapper to generate a 3D model from an uploaded image
 func tripoHandler(w http.ResponseWriter, r *http.Request) {
@@ -438,8 +428,7 @@ func processURLImage(w http.ResponseWriter, r *http.Request) {
 
 	// Parse JSON request
 	var req URLRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, `{"success":false,"error":"Invalid request"}`)
 		return
@@ -451,195 +440,99 @@ func processURLImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Download image from URL
-	resp, err := http.Get(req.URL)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, `{"success":false,"error":"Failed to fetch URL: %v"}`, err)
-		return
-	}
-	defer resp.Body.Close()
+	// Support data: URIs (base64 or percent-encoded) or remote URLs
+	var fileBytes []byte
+	if strings.HasPrefix(req.URL, "data:") {
+		// data:[<mediatype>][;base64],<data>
+		comma := strings.Index(req.URL, ",")
+		if comma < 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, `{"success":false,"error":"Invalid data URI"}`)
+			return
+		}
+		meta := req.URL[5:comma]
+		dataPart := req.URL[comma+1:]
+		if strings.Contains(strings.ToLower(meta), ";base64") {
+			b, err := base64.StdEncoding.DecodeString(dataPart)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				fmt.Fprintf(w, `{"success":false,"error":"Failed to decode base64 data URI: %v"}` , err)
+				return
+			}
+			fileBytes = b
+		} else {
+			s, err := neturl.QueryUnescape(dataPart)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				fmt.Fprintf(w, `{"success":false,"error":"Failed to unescape data URI: %v"}` , err)
+				return
+			}
+			fileBytes = []byte(s)
+		}
+	} else {
+		resp, err := http.Get(req.URL)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, `{"success":false,"error":"Failed to fetch URL: %v"}` , err)
+			return
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, `{"success":false,"error":"Failed to fetch URL: HTTP %d"}`, resp.StatusCode)
-		return
+		if resp.StatusCode != http.StatusOK {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, `{"success":false,"error":"Failed to fetch URL: HTTP %d"}` , resp.StatusCode)
+			return
+		}
+
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, `{"success":false,"error":"Failed to read image"}`)
+			return
+		}
+		fileBytes = b
 	}
 
-	// Read image data
-	fileBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, `{"success":false,"error":"Failed to read image"}`)
-		return
-	}
-
-	// Create temp directory
+	// Save to temp and call orchestration script (which uses Python backend classes)
 	tmpDir := filepath.Join(".", "temp")
 	os.MkdirAll(tmpDir, 0755)
-
-	// Save original image
-	originalPath := filepath.Join(tmpDir, "input_url.jpg")
-	err = os.WriteFile(originalPath, fileBytes, 0644)
-	if err != nil {
+	originalPath := filepath.Join(tmpDir, fmt.Sprintf("input_%d_%s", time.Now().UnixNano(), "url_input.jpg"))
+	if err := os.WriteFile(originalPath, fileBytes, 0644); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("Failed to save image to %s: %v", originalPath, err)
 		fmt.Fprintf(w, `{"success":false,"error":"Failed to save image"}`)
 		return
 	}
 
-	// Verify file was written
-	if _, err := os.Stat(originalPath); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("File not found after writing: %s, error: %v", originalPath, err)
-		fmt.Fprintf(w, `{"success":false,"error":"File not created"}`)
-		return
-	}
-
-	// Get working directory for logging
-	wd, _ := os.Getwd()
-	log.Printf("Working directory: %s, Input path: %s, Depth path: temp/depth_url.png", wd, originalPath)
-
-	// Run MiDaS depth estimation
-	depthPath := filepath.Join(tmpDir, "depth_url.png")
-	cmd := exec.Command("python3", "depth_estimator.py", originalPath, depthPath)
-	cmd.Dir = "."
-
-	output, err := cmd.CombinedOutput()
+	pyCmd := exec.Command("python3", "scripts/process_url_image.py", originalPath)
+	pyCmd.Dir = "."
+	out, err := pyCmd.CombinedOutput()
 	if err != nil {
+		log.Printf("Orchestration script failed: %v\nOutput: %s", err, string(out))
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("MiDaS error for URL %s: %v\nInput: %s\nOutput: %s\nDepth: %s", req.URL, err, originalPath, string(output), depthPath)
-		fmt.Fprintf(w, `{"success":false,"error":"MiDaS failed: %v\nOutput: %s"}`, err, string(output))
+		fmt.Fprintf(w, `{"success":false,"error":"Orchestration script failed","output":"%s"}` , string(out))
 		return
 	}
 
-	// Read depth map
-	depthBytes, err := os.ReadFile(depthPath)
-	if err != nil {
+	var pyResp map[string]interface{}
+	if err := json.Unmarshal(out, &pyResp); err != nil {
+		log.Printf("Invalid JSON from orchestration: %s", string(out))
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("Failed to read depth map from %s: %v", depthPath, err)
-		fmt.Fprintf(w, `{"success":false,"error":"Failed to read depth map"}`)
+		fmt.Fprintf(w, `{"success":false,"error":"Invalid JSON from orchestration","output":"%s"}` , string(out))
 		return
 	}
 
-	// Encode images to base64
-	originalB64 := base64.StdEncoding.EncodeToString(fileBytes)
-	depthB64 := base64.StdEncoding.EncodeToString(depthBytes)
-
-	// Clean up
-	os.Remove(originalPath)
-	os.Remove(depthPath)
-
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"originalImage":"data:image/jpeg;base64,%s","depthMap":"data:image/png;base64,%s","success":true}`, 
-		originalB64, depthB64)
-}
-
-func processURLImage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-
-	// Parse JSON request
-	var req URLRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, `{"success":false,"error":"Invalid request"}`)
-		return
-	}
-
-	if req.URL == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, `{"success":false,"error":"URL is required"}`)
-		return
-	}
-
-	// Download image from URL
-	resp, err := http.Get(req.URL)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, `{"success":false,"error":"Failed to fetch URL: %v"}`, err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, `{"success":false,"error":"Failed to fetch URL: HTTP %d"}`, resp.StatusCode)
-		return
-	}
-
-	// Read image data
-	fileBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
+	if success, ok := pyResp["success"].(bool); !ok || !success {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, `{"success":false,"error":"Failed to read image"}`)
+		json.NewEncoder(w).Encode(pyResp)
 		return
 	}
 
-	// Create temp directory
-	tmpDir := filepath.Join(".", "temp")
-	os.MkdirAll(tmpDir, 0755)
+	taskID, _ := pyResp["task_id"].(string)
+	glbURL, _ := pyResp["glb_url"].(string)
 
-	// Save original image
-	originalPath := filepath.Join(tmpDir, "input_url.jpg")
-	err = os.WriteFile(originalPath, fileBytes, 0644)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("Failed to save image to %s: %v", originalPath, err)
-		fmt.Fprintf(w, `{"success":false,"error":"Failed to save image"}`)
-		return
-	}
-
-	// Verify file was written
-	if _, err := os.Stat(originalPath); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("File not found after writing: %s, error: %v", originalPath, err)
-		fmt.Fprintf(w, `{"success":false,"error":"File not created"}`)
-		return
-	}
-
-	// Get working directory for logging
-	wd, _ := os.Getwd()
-	log.Printf("Working directory: %s, Input path: %s, Depth path: temp/depth_url.png", wd, originalPath)
-
-	// Run MiDaS depth estimation
-	depthPath := filepath.Join(tmpDir, "depth_url.png")
-	cmd := exec.Command("python3", "depth_estimator.py", originalPath, depthPath)
-	cmd.Dir = "."
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("MiDaS error for URL %s: %v\nInput: %s\nOutput: %s\nDepth: %s", req.URL, err, originalPath, string(output), depthPath)
-		fmt.Fprintf(w, `{"success":false,"error":"MiDaS failed: %v\nOutput: %s"}`, err, string(output))
-		return
-	}
-
-	// Read depth map
-	depthBytes, err := os.ReadFile(depthPath)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("Failed to read depth map from %s: %v", depthPath, err)
-		fmt.Fprintf(w, `{"success":false,"error":"Failed to read depth map"}`)
-		return
-	}
-
-	// Encode images to base64
-	originalB64 := base64.StdEncoding.EncodeToString(fileBytes)
-	depthB64 := base64.StdEncoding.EncodeToString(depthBytes)
-
-	// Clean up
-	os.Remove(originalPath)
-	os.Remove(depthPath)
-
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"originalImage":"data:image/jpeg;base64,%s","depthMap":"data:image/png;base64,%s","success":true}`, 
-		originalB64, depthB64)
+	log.Printf("Meshy task created: %s; GLB: %s", taskID, glbURL)
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "task_id": taskID, "glb_url": glbURL})
 }
 
 func main() {
@@ -651,7 +544,6 @@ func main() {
 
 	mux.HandleFunc("/api/hello", helloHandler)
 	mux.HandleFunc("/api/process-image", uploadAndProcessImage)
-	mux.HandleFunc("/api/process-url", processURLImage)
 	mux.HandleFunc("/api/process-url", processURLImage)
 	mux.HandleFunc("/api/process-3d", process3DPipeline)
 	mux.HandleFunc("/api/tripo", tripoHandler)

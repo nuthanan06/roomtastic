@@ -1,10 +1,10 @@
 try:
-    from backend.db.database import Database
+    from backend.utils.database import Database
 except Exception:
     import sys
     import os
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-    from database import Database
+    from backend.utils.database import Database
 
 
 def test_upload_image_and_get_link():

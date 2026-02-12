@@ -15,11 +15,11 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 
-from backend.db.database import Database
+from backend.utils.database import Database
 
 # Import Meshy helper robustly: try absolute import first, then fall back to inserting paths
 try:
-    from backend.meshy.helper import MeshyHelper
+    from backend.utils.meshy import MeshyHelper
 except Exception as e:
     print("Warning: failed to import backend.meshy.helper via package import:", e)
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -27,7 +27,7 @@ except Exception as e:
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
     try:
-        from backend.meshy.helper import MeshyHelper
+        from backend.utils.meshy import MeshyHelper
     except Exception:
         # as a last resort, import helper.py directly from backend/meshy
         meshy_dir = os.path.join(repo_root, "backend", "meshy")

@@ -1,9 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
-export default function LeftSidebar() {
+interface LeftSidebarProps {
+  onDimensionsChange?: (width: number, length: number) => void;
+}
+
+export default function LeftSidebar({ onDimensionsChange }: LeftSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [width, setWidth] = useState(10); // default width of 10
+  const [length, setLength] = useState(10); // default length of 10
+
+  // Initialize dimensions on mount
+  useEffect(() => {
+    onDimensionsChange?.(width, length);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div 
@@ -31,9 +42,55 @@ export default function LeftSidebar() {
       {!isCollapsed && (
         <div className="h-full overflow-y-auto">
           <div className="p-6">
-            {/* Empty sidebar - content will be added later */}
-            <h2 className="text-2xl font-bold text-white mb-2">Tools</h2>
-            <p className="text-gray-400 text-sm">Content coming soon...</p>
+            <h2 className="text-2xl font-bold text-white mb-6">Room Controls</h2>
+            
+            <div className="space-y-6">
+              {/* Width Input */}
+              <div>
+                <label 
+                  htmlFor="width" 
+                  className="block text-sm font-medium text-gray-300 mb-2"
+                >
+                  Width
+                </label>
+                <input
+                  type="number"
+                  id="width"
+                  min="1"
+                  max="50"
+                  value={width}
+                  onChange={(e) => {
+                    const newWidth = Number(e.target.value);
+                    setWidth(newWidth);
+                    onDimensionsChange?.(newWidth, length);
+                  }}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:bg-white focus:text-gray-900 focus:border-blue-400 focus:outline-none transition-all duration-200"
+                />
+              </div>
+
+              {/* Length Input */}
+              <div>
+                <label 
+                  htmlFor="length" 
+                  className="block text-sm font-medium text-gray-300 mb-2"
+                >
+                  Length
+                </label>
+                <input
+                  type="number"
+                  id="length"
+                  min="1"
+                  max="50"
+                  value={length}
+                  onChange={(e) => {
+                    const newLength = Number(e.target.value);
+                    setLength(newLength);
+                    onDimensionsChange?.(width, newLength);
+                  }}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:bg-white focus:text-gray-900 focus:border-blue-400 focus:outline-none transition-all duration-200"
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

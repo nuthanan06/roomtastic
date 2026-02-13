@@ -4,21 +4,22 @@ import * as THREE from 'three';
 import { Grid } from '@react-three/drei';
 
 interface Grid3DProps {
-  size?: number;        // Grid size (20x20 by default)
-  cellSize?: number;    // Size of each cell (1 unit by default)
-  floorColor?: string;  // Floor plane color
-  gridColor?: string;  // Grid line color
+  width?: number;        // Grid width (X dimension)
+  length?: number;       // Grid length (Z dimension)
+  cellSize?: number;    
+  floorColor?: string;  
+  gridColor?: string;  
 }
 
 export default function Grid3D({ 
-  size = 10, 
+  width = 10, 
+  length = 10,
   cellSize = 1,
   floorColor = '#FFFFFF',
   gridColor = '#000000'
 }: Grid3DProps) {
-  // Calculate grid dimensions
-  const gridWidth = size;
-  const gridDepth = size;
+  const gridWidth = width;
+  const gridDepth = length;
 
   return (
     <group>
@@ -44,7 +45,7 @@ export default function Grid3D({
         sectionSize={cellSize}
         sectionThickness={1}
         sectionColor={gridColor}
-        fadeDistance={size}
+        fadeDistance={Math.max(gridWidth, gridDepth)}
         fadeStrength={1}
         followCamera={false}
         infiniteGrid={false}

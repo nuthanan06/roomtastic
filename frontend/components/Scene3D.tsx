@@ -14,9 +14,16 @@ interface ProcessedData {
 
 export default function Scene3D() {
     const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
+    const [gridWidth, setGridWidth] = useState(10);
+    const [gridLength, setGridLength] = useState(10);
 
     const handleProcessed = (data: ProcessedData | null) => {
         setProcessedData(data);
+    };
+
+    const handleDimensionsChange = (width: number, length: number) => {
+        setGridWidth(width);
+        setGridLength(length);
     };
 
     return (
@@ -38,7 +45,7 @@ export default function Scene3D() {
                     <pointLight position={[-10, 10, -10]} intensity={0.3} />
 
                     {/* Grid */}
-                    <Grid3D size={10} cellSize={1} />
+                    <Grid3D width={gridWidth} length={gridLength} cellSize={1} />
 
                     {/* TODO: Add processed 3D model here when processedData is available */}
                     {processedData && (
@@ -63,7 +70,7 @@ export default function Scene3D() {
             </div>
 
             {/* Left Sidebar */}
-            <LeftSidebar />
+            <LeftSidebar onDimensionsChange={handleDimensionsChange} />
 
             {/* Right Sidebar */}
             <ImageUploadSidebar onProcessed={handleProcessed} />

@@ -9,7 +9,7 @@ import base64
 import json
 import time
 from typing import Optional
-from api.process.process import process_url
+from api.process.process import process_url as process_url_handler
 
 # ensure backend package imports work
 ROOT = os.path.abspath(os.path.dirname(__file__))
@@ -175,5 +175,37 @@ async def tripo_endpoint(image: UploadFile = File(...), prompt: Optional[str] = 
 
 @app.post("/api/process-url")
 async def process_url(req: dict):
-    resp = process_url(req)
+    resp = process_url_handler(req)
     return JSONResponse(resp)
+
+
+@app.post("/api/scrape-ikea")
+async def scrape_ikea_product(req: dict):
+    """
+    Scrape IKEA product page to extract details
+    
+    Expected JSON body:
+    {
+        "url": "https://www.ikea.com/...",
+        "headless": true  // optional, default true
+    }
+    """
+    url = req.get('url')
+    if not url:
+        raise HTTPException(status_code=400, detail='url is required')
+    
+    if 'ikea.com' not in url.lower():
+        raise HTTPException(status_code=400, detail='Only IKEA URLs are supported')
+    
+    headless = req.get('headless', True)
+    
+    try:
+        from utils.ikea_scraper import scrape_ikea_product
+        product_data = scrape_ikea_product(url, headless=headless)
+        
+        if 'error' in product_data:
+            raise HTTPException(status_code=500, detail=product_data['error'])
+        
+        return JSONResponse({"success": True, "product": product_data})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

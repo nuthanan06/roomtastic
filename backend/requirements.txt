@@ -8,3 +8,7 @@ requests==2.31.0
 
 tripo3d
 aiohttp
+fastapi
+uvicorn[standard]
+selenium
+webdriver-manager

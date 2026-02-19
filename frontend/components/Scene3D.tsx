@@ -64,8 +64,6 @@ export default function Scene3D() {
                         target={[0, 0, 0]}
                     />
 
-                    {/* Helper axes (optional - for debugging) */}
-                    <axesHelper args={[5]} />
                 </Canvas>
             </div>
 

@@ -4,39 +4,9 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { Viewer3D } from "./Viewer3D";
 
-
-// For six orthographic views and their depth maps
-interface OrthographicViews {
-  front: string;
-  back: string;
-  left: string;
-  right: string;
-  top: string;
-  bottom: string;
-}
-
-interface DepthMaps {
-  front: string;
-  back: string;
-  left: string;
-  right: string;
-  top: string;
-  bottom: string;
-}
-
 interface ProcessedData {
   originalImage: string;
   depthMap: string;
-}
-
-
-interface DepthMaps {
-  front: string;
-  back: string;
-  left: string;
-  right: string;
-  top: string;
-  bottom: string;
 }
 
 interface ProductDimensions {
@@ -45,16 +15,12 @@ interface ProductDimensions {
   height: number;
 }
 
-
 export const ImageUploader: React.FC = () => {
-  // Step state: 0 = upload, 1 = orthographic, 2 = depth, 3 = 3D
-  const [processedFile, setProcessedFile] = useState<File | null>(null);
-  const [step, setStep] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
   const [inputMode, setInputMode] = useState<'file' | 'url'>('file');
   const [url, setUrl] = useState<string>('');
   const [dimensions, setDimensions] = useState<ProductDimensions>({
@@ -84,6 +50,7 @@ export const ImageUploader: React.FC = () => {
 
     setIsLoading(true);
     setError(null);
+
     try {
       const formData = new FormData();
       formData.append('image', file);

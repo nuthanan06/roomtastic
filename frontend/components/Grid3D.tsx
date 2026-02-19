@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { Grid } from '@react-three/drei';
+import Walls from '@/components/Walls';
 
 interface Grid3DProps {
   size?: number;        // Grid size (20x20 by default)
@@ -22,6 +23,7 @@ export default function Grid3D({
 
   return (
     <group>
+      <Walls width={gridWidth} length={gridDepth} />
       <mesh 
         rotation={[-Math.PI / 2, 0, 0]} 
         position={[0, 0, 0]}

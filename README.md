@@ -22,7 +22,7 @@ Convert any 2D image into an interactive 3D visualization using depth estimation
 ## Tech Stack
 
 - **Frontend**: React + Next.js 16 + Three.js + TypeScript
-- **Backend**: Go + Python (MiDaS)
+- **Backend**: Python (FastAPI + SQLAlchemy + PostgreSQL; MiDaS depth scripts)
 - **Depth Estimation**: Meta's MiDaS (DPT-Hybrid)
 - **3D Rendering**: Three.js with WebGL
 
@@ -41,46 +41,123 @@ The project planning board defines these core entities for the room-design workf
 
 > Note: Full field-level schema details are maintained in the Figma planning file above.
 
-## Planned API Schemes / Routes
+## API (FastAPI)
 
-The API route plan in Figma is organized around CRUD + layout operations for room design.
+Base URL (local): `http://localhost:8000`. Interactive docs: `http://localhost:8000/docs`.
 
-### Core Resource Routes (Planned)
+### Legacy / vision / scraping
 
-- `/api/users` and `/api/users/:id`
-- `/api/rooms` and `/api/rooms/:id`
-- `/api/furniture` and `/api/furniture/:id`
-- `/api/inventory` and `/api/inventory/:id`
-- `/api/positions` and `/api/positions/:id`
-- `/api/windows` and `/api/windows/:id`
-- `/api/doors` and `/api/doors/:id`
+- `GET /api/hello`
+- `POST /api/process-image`
+- `POST /api/process-3d`
+- `POST /api/tripo`
+- `POST /api/process-url`
+- `POST /api/scrape-ikea`
 
-### Room Composition Routes (Planned)
+### Auth
 
-- Routes to place/update/remove furniture in rooms
-- Routes to manage room accessories/openings (doors/windows)
-- Routes to retrieve complete room layout state for 3D rendering
+- `POST /api/auth/register`
+- `POST /api/auth/login` (Bearer token for protected routes)
+- `GET /api/auth/me` (requires `Authorization: Bearer <token>`)
 
-### Existing Implemented Backend Routes (Current)
+### Users
 
-- `/api/process-image`
-- `/api/process-3d`
-- `/api/tripo`
-- `/api/process-url`
-- `/api/scrape-ikea`
+- `POST /api/users`
+- `GET /api/users/{userId}`
+- `PATCH /api/users/{userId}`
+- `DELETE /api/users/{userId}`
+- `GET /api/users/{userId}/rooms`
+
+### Rooms
+
+- `POST /api/rooms` (body includes `user_id` plus room fields)
+- `GET /api/rooms/{roomId}` (includes composed child IDs)
+- `PATCH /api/rooms/{roomId}`
+- `DELETE /api/rooms/{roomId}`
+- `GET /api/rooms/{roomId}/shopping-list`
+
+### Furniture
+
+- `POST /api/rooms/{roomId}/furniture`
+- `GET /api/rooms/{roomId}/furniture`
+- `PATCH /api/furniture/{furnitureId}`
+- `DELETE /api/furniture/{furnitureId}`
+- `PATCH /api/furniture/{furnitureId}/move`
+- `PATCH /api/furniture/{furnitureId}/rotate`
+
+### Lights (LightingFurniture; requires `furniture_id` in body for create)
+
+- `POST /api/rooms/{roomId}/lights`
+- `PATCH /api/lights/{lightId}`
+- `DELETE /api/lights/{lightId}`
+
+### Inventory
+
+- `GET /api/inventory`
+- `GET /api/inventory/{inventoryId}`
+- `POST /api/inventory`
+- `PATCH /api/inventory/{inventoryId}`
+- `DELETE /api/inventory/{inventoryId}`
+
+### Positions
+
+- `GET /api/positions`
+- `POST /api/positions`
+- `GET /api/positions/{positionId}`
+- `PATCH /api/positions/{positionId}`
+- `DELETE /api/positions/{positionId}`
+
+### Windows
+
+- `POST /api/rooms/{roomId}/windows`
+- `GET /api/rooms/{roomId}/windows`
+- `PATCH /api/windows/{windowId}`
+- `DELETE /api/windows/{windowId}`
+
+### Doors
+
+- `POST /api/rooms/{roomId}/doors`
+- `GET /api/rooms/{roomId}/doors`
+- `PATCH /api/doors/{doorId}`
+- `DELETE /api/doors/{doorId}`
+
+### Jobs / AI placeholders (enqueue rows in `jobs`; processed by `workers/worker.py`)
+
+- `POST /api/rooms/{roomId}/generate-layout`
+- `POST /api/rooms/{roomId}/optimize-layout`
+- `POST /api/rooms/{roomId}/furniture-suggestions`
+- `PUT /api/room-chat` (body: `room_id`, `message`)
+- `POST /api/rooms/{roomId}/room-chat` (body: `message`)
+- `GET /api/jobs/{jobId}`
+
+Higher-level planning for routes and schemas still lives in Figma (link at the top of this README).
 
 ## Quick Start
 
-See [IMPLEMENTATION_GUIDE.md](./IMPLEMENTATION_GUIDE.md) for detailed setup instructions.
+### Docker Compose (Postgres + backend + frontend + worker)
 
-### Backend
+From the repo root:
+
+```bash
+docker compose up --build
+```
+
+- API: `http://localhost:8000` (docs at `/docs`)
+- Frontend: `http://localhost:3000`
+- Set `DATABASE_URL` if you override defaults (Compose sets `postgresql+psycopg://...` for services).
+- **Schema changes**: tables are created on backend startup (`create_all`). If you change models and Postgres already has an older schema, reset the volume: `docker compose down -v` (destructive) or add Alembic migrations.
+
+The worker mounts `./backend` at `/backend` and sets `BACKEND_PATH=/backend` and `DATABASE_URL` so it can import `app` and poll the `jobs` table.
+
+### Backend (local venv)
+
 ```bash
 cd backend
-go mod tidy
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-go run main.go
+# Ensure PostgreSQL is running and DATABASE_URL is set if not using defaults
+python3 main.py
 ```
 
 ### Frontend
@@ -91,6 +168,27 @@ npm run dev
 ```
 
 Visit `http://localhost:3000` and upload an image!
+
+### Optional: Seed Inventory (for AI placeholder suggestions)
+
+```bash
+cd backend
+source venv/bin/activate
+export DATABASE_URL=postgresql+psycopg://roomtastic:roomtastic@localhost:5432/roomtastic
+python3 scripts/seed_inventory.py
+```
+
+### Workers (processes placeholder AI/layout/chat jobs)
+
+With Postgres available and `DATABASE_URL` pointing at it:
+
+```bash
+cd workers
+export DATABASE_URL=postgresql+psycopg://roomtastic:roomtastic@localhost:5432/roomtastic
+python3 worker.py
+```
+
+(`BACKEND_PATH` defaults to `../backend` when run from the repo layout.)
 
 ## Architecture
 

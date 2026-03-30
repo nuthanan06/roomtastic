@@ -22,7 +22,7 @@ Convert any 2D image into an interactive 3D visualization using depth estimation
 ## Tech Stack
 
 - **Frontend**: React + Next.js 16 + Three.js + TypeScript
-- **Backend**: Go + Python (MiDaS)
+- **Backend**: Python (FastAPI + SQLAlchemy + PostgreSQL; MiDaS depth scripts)
 - **Depth Estimation**: Meta's MiDaS (DPT-Hybrid)
 - **3D Rendering**: Three.js with WebGL
 
@@ -71,16 +71,30 @@ The API route plan in Figma is organized around CRUD + layout operations for roo
 
 ## Quick Start
 
-See [IMPLEMENTATION_GUIDE.md](./IMPLEMENTATION_GUIDE.md) for detailed setup instructions.
+### Docker Compose (Postgres + backend + frontend + worker)
 
-### Backend
+From the repo root:
+
+```bash
+docker compose up --build
+```
+
+- API: `http://localhost:8000` (docs at `/docs`)
+- Frontend: `http://localhost:3000`
+- Set `DATABASE_URL` if you override defaults (Compose sets `postgresql+psycopg://...` for services).
+- **Schema changes**: tables are created on backend startup (`create_all`). If you change models and Postgres already has an older schema, reset the volume: `docker compose down -v` (destructive) or add Alembic migrations.
+
+The worker mounts `./backend` at `/backend` and sets `BACKEND_PATH=/backend` and `DATABASE_URL` so it can import `app` and poll the `jobs` table.
+
+### Backend (local venv)
+
 ```bash
 cd backend
-go mod tidy
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-go run main.go
+# Ensure PostgreSQL is running and DATABASE_URL is set if not using defaults
+python3 main.py
 ```
 
 ### Frontend
@@ -91,6 +105,27 @@ npm run dev
 ```
 
 Visit `http://localhost:3000` and upload an image!
+
+### Optional: Seed Inventory (for AI placeholder suggestions)
+
+```bash
+cd backend
+source venv/bin/activate
+export DATABASE_URL=postgresql+psycopg://roomtastic:roomtastic@localhost:5432/roomtastic
+python3 scripts/seed_inventory.py
+```
+
+### Workers (processes placeholder AI/layout/chat jobs)
+
+With Postgres available and `DATABASE_URL` pointing at it:
+
+```bash
+cd workers
+export DATABASE_URL=postgresql+psycopg://roomtastic:roomtastic@localhost:5432/roomtastic
+python3 worker.py
+```
+
+(`BACKEND_PATH` defaults to `../backend` when run from the repo layout.)
 
 ## Architecture
 

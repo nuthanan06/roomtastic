@@ -1,0 +1,65 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: roomtastic
+      POSTGRES_PASSWORD: roomtastic
+      POSTGRES_DB: roomtastic
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql+psycopg://roomtastic:roomtastic@db:5432/roomtastic
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build: ./frontend
+    command: npm run dev
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+  redis:
+    image: redis:7
+    restart: always
+    ports:
+      - "6379:6379"
+
+  worker:
+    build: ./workers
+    command: python worker.py
+    volumes:
+      - ./workers:/app
+      - ./backend:/backend
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+psycopg://roomtastic:roomtastic@db:5432/roomtastic
+      - BACKEND_PATH=/backend
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - redis
+      - db
+      - backend
+
+volumes:
+  postgres_data:

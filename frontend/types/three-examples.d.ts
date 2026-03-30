@@ -5,7 +5,7 @@ declare module 'three/examples/jsm/loaders/GLTFLoader' {
     scene: Group;
     scenes: Group[];
     animations: unknown[];
-    asset: any;
+    asset: unknown;
   }
 
   export class GLTFLoader extends Loader {

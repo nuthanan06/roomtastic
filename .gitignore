@@ -45,6 +45,7 @@ temp/
 *.png
 depth_cache/
 uploads/
+*.db
 
 # Go
 *.exe
@@ -56,3 +57,5 @@ uploads/
 # Environment
 .env
 .env.local
+.sfdx
+.trash

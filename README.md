@@ -41,96 +41,33 @@ The project planning board defines these core entities for the room-design workf
 
 > Note: Full field-level schema details are maintained in the Figma planning file above.
 
-## API (FastAPI)
+## Planned API Schemes / Routes
 
-Base URL (local): `http://localhost:8000`. Interactive docs: `http://localhost:8000/docs`.
+The API route plan in Figma is organized around CRUD + layout operations for room design.
 
-### Legacy / vision / scraping
+### Core Resource Routes (Planned)
 
-- `GET /api/hello`
-- `POST /api/process-image`
-- `POST /api/process-3d`
-- `POST /api/tripo`
-- `POST /api/process-url`
-- `POST /api/scrape-ikea`
+- `/api/users` and `/api/users/:id`
+- `/api/rooms` and `/api/rooms/:id`
+- `/api/furniture` and `/api/furniture/:id`
+- `/api/inventory` and `/api/inventory/:id`
+- `/api/positions` and `/api/positions/:id`
+- `/api/windows` and `/api/windows/:id`
+- `/api/doors` and `/api/doors/:id`
 
-### Auth
+### Room Composition Routes (Planned)
 
-- `POST /api/auth/register`
-- `POST /api/auth/login` (Bearer token for protected routes)
-- `GET /api/auth/me` (requires `Authorization: Bearer <token>`)
+- Routes to place/update/remove furniture in rooms
+- Routes to manage room accessories/openings (doors/windows)
+- Routes to retrieve complete room layout state for 3D rendering
 
-### Users
+### Existing Implemented Backend Routes (Current)
 
-- `POST /api/users`
-- `GET /api/users/{userId}`
-- `PATCH /api/users/{userId}`
-- `DELETE /api/users/{userId}`
-- `GET /api/users/{userId}/rooms`
-
-### Rooms
-
-- `POST /api/rooms` (body includes `user_id` plus room fields)
-- `GET /api/rooms/{roomId}` (includes composed child IDs)
-- `PATCH /api/rooms/{roomId}`
-- `DELETE /api/rooms/{roomId}`
-- `GET /api/rooms/{roomId}/shopping-list`
-
-### Furniture
-
-- `POST /api/rooms/{roomId}/furniture`
-- `GET /api/rooms/{roomId}/furniture`
-- `PATCH /api/furniture/{furnitureId}`
-- `DELETE /api/furniture/{furnitureId}`
-- `PATCH /api/furniture/{furnitureId}/move`
-- `PATCH /api/furniture/{furnitureId}/rotate`
-
-### Lights (LightingFurniture; requires `furniture_id` in body for create)
-
-- `POST /api/rooms/{roomId}/lights`
-- `PATCH /api/lights/{lightId}`
-- `DELETE /api/lights/{lightId}`
-
-### Inventory
-
-- `GET /api/inventory`
-- `GET /api/inventory/{inventoryId}`
-- `POST /api/inventory`
-- `PATCH /api/inventory/{inventoryId}`
-- `DELETE /api/inventory/{inventoryId}`
-
-### Positions
-
-- `GET /api/positions`
-- `POST /api/positions`
-- `GET /api/positions/{positionId}`
-- `PATCH /api/positions/{positionId}`
-- `DELETE /api/positions/{positionId}`
-
-### Windows
-
-- `POST /api/rooms/{roomId}/windows`
-- `GET /api/rooms/{roomId}/windows`
-- `PATCH /api/windows/{windowId}`
-- `DELETE /api/windows/{windowId}`
-
-### Doors
-
-- `POST /api/rooms/{roomId}/doors`
-- `GET /api/rooms/{roomId}/doors`
-- `PATCH /api/doors/{doorId}`
-- `DELETE /api/doors/{doorId}`
-
-### Jobs / AI placeholders (enqueue rows in `jobs`; processed by `workers/worker.py`)
-
-- `POST /api/rooms/{roomId}/generate-layout`
-- `POST /api/rooms/{roomId}/optimize-layout`
-- `POST /api/rooms/{roomId}/furniture-suggestions`
-- `PUT /api/room-chat` (body: `room_id`, `message`)
-- `POST /api/rooms/{roomId}/room-chat` (body: `message`)
-- `GET /api/jobs/{jobId}`
-
-Higher-level planning for routes and schemas still lives in Figma (link at the top of this README).
+- `/api/process-image`
+- `/api/process-3d`
+- `/api/tripo`
+- `/api/process-url`
+- `/api/scrape-ikea`
 
 ## Quick Start
 

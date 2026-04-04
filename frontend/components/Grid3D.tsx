@@ -5,22 +5,25 @@ import { Grid } from '@react-three/drei';
 import Walls from '@/components/Walls';
 
 interface Grid3DProps {
-  width?: number;        // Grid width (X dimension)
-  length?: number;       // Grid length (Z dimension)
-  cellSize?: number;    
-  floorColor?: string;  
-  gridColor?: string;  
+  width?: number;
+  length?: number;
+  /** If width/length are omitted, both axes use this (default 10). */
+  size?: number;
+  cellSize?: number;
+  floorColor?: string;
+  gridColor?: string;
 }
 
 export default function Grid3D({ 
-  width = 10, 
-  length = 10,
+  width,
+  length,
+  size = 10, 
   cellSize = 1,
   floorColor = '#FFFFFF',
   gridColor = '#000000'
 }: Grid3DProps) {
-  const gridWidth = width;
-  const gridDepth = length;
+  const gridWidth = width ?? size;
+  const gridDepth = length ?? size;
 
   return (
     <group>

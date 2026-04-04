@@ -9,6 +9,12 @@ interface ProcessedData {
   depthMap: string;
 }
 
+interface ProductDimensions {
+  width: number;
+  depth: number;
+  height: number;
+}
+
 export const ImageUploader: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -17,6 +23,11 @@ export const ImageUploader: React.FC = () => {
   const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
   const [inputMode, setInputMode] = useState<'file' | 'url'>('file');
   const [url, setUrl] = useState<string>('');
+  const [dimensions, setDimensions] = useState<ProductDimensions>({
+    width: 100,
+    depth: 100,
+    height: 100,
+  });
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];

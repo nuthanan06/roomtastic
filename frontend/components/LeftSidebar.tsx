@@ -8,10 +8,9 @@ interface LeftSidebarProps {
 
 export default function LeftSidebar({ onDimensionsChange }: LeftSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [width, setWidth] = useState(10); // default width of 10
-  const [length, setLength] = useState(10); // default length of 10
+  const [width, setWidth] = useState(10);
+  const [length, setLength] = useState(10);
 
-  // Initialize dimensions on mount
   useEffect(() => {
     onDimensionsChange?.(width, length);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -45,7 +44,6 @@ export default function LeftSidebar({ onDimensionsChange }: LeftSidebarProps) {
             <h2 className="text-2xl font-bold text-white mb-6">Room Controls</h2>
             
             <div className="space-y-6">
-              {/* Width Input */}
               <div>
                 <label 
                   htmlFor="width" 
@@ -68,7 +66,6 @@ export default function LeftSidebar({ onDimensionsChange }: LeftSidebarProps) {
                 />
               </div>
 
-              {/* Length Input */}
               <div>
                 <label 
                   htmlFor="length" 

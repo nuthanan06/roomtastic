@@ -1,0 +1,32 @@
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
+from uuid import UUID
+from datetime import datetime
+
+class InventoryBase(BaseModel):
+    name: str
+    category: Optional[str] = None
+    width: Optional[int] = None
+    length: Optional[int] = None
+    height: Optional[int] = None
+    model_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    colour_options: Optional[str] = None
+    price: Optional[str] = None
+    description: Optional[str] = None
+    url_link: Optional[str] = None
+    source: Optional[str] = None
+    source_id: Optional[str] = None
+
+class InventoryCreate(InventoryBase):
+    pass
+
+class InventoryUpdate(InventoryBase):
+    pass
+
+class InventoryOut(InventoryBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    inventory_id: UUID
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None

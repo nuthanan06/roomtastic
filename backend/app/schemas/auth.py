@@ -23,3 +23,11 @@ class AuthMe(BaseModel):
     email: str
     first_name: str
     last_name: str
+
+
+class AuthLoginResponse(BaseModel):
+    """Token plus profile for SPA clients."""
+
+    access_token: str
+    token_type: str = "bearer"
+    user: AuthMe

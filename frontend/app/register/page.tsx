@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { setAuth, type StoredUser } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/errors";
 
-type AuthResponse = { token: string; user: StoredUser };
+type AuthResponse = { access_token: string; user: StoredUser };
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -19,12 +19,15 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-xl">
-        <h1 className="text-2xl font-semibold">Register</h1>
-        <p className="text-sm text-gray-400 mt-1">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-950 text-slate-100 flex items-center justify-center p-6">
+      <div className="w-full max-w-md rounded-2xl border border-violet-500/25 bg-slate-900/70 backdrop-blur-md p-8 shadow-2xl shadow-violet-950/50">
+        <Link href="/" className="text-sm text-indigo-300 hover:text-indigo-200">
+          ← Back home
+        </Link>
+        <h1 className="text-2xl font-semibold text-white mt-4">Register</h1>
+        <p className="text-sm text-indigo-200/70 mt-1">
           Already have an account?{" "}
-          <Link className="text-blue-400 hover:underline" href="/login">
+          <Link className="text-violet-300 hover:text-violet-200 underline-offset-2 hover:underline" href="/login">
             Log in
           </Link>
         </p>
@@ -45,7 +48,7 @@ export default function RegisterPage() {
                   password,
                 }),
               });
-              setAuth(resp.token, resp.user);
+              setAuth(resp.access_token, resp.user);
               router.push("/rooms");
             } catch (e: unknown) {
               setError(getErrorMessage(e));
@@ -56,39 +59,40 @@ export default function RegisterPage() {
         >
           <div className="flex gap-2">
             <input
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"
+              className="flex-1 bg-slate-950/80 border border-violet-500/20 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400 focus:outline-none"
               placeholder="First name"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
             />
             <input
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"
+              className="flex-1 bg-slate-950/80 border border-violet-500/20 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400 focus:outline-none"
               placeholder="Last name"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
             />
           </div>
           <input
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"
+            className="w-full bg-slate-950/80 border border-violet-500/20 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400 focus:outline-none"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
           <input
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"
+            className="w-full bg-slate-950/80 border border-violet-500/20 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-400 focus:outline-none"
             placeholder="Password (min 8 chars)"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
           {error && (
-            <div className="text-sm bg-red-950/40 border border-red-800 text-red-200 rounded-lg px-3 py-2">
+            <div className="text-sm bg-red-950/40 border border-red-500/40 text-red-200 rounded-xl px-3 py-2">
               {error}
             </div>
           )}
           <button
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg px-3 py-2 font-semibold"
+            type="submit"
+            className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 rounded-xl px-3 py-2.5 font-semibold shadow-lg shadow-violet-900/30"
           >
             {loading ? "Creating account..." : "Create account"}
           </button>

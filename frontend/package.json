@@ -6,14 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "generate-mock-glbs": "node scripts/generate-mock-glbs.mjs"
   },
   "dependencies": {
+    "@react-three/drei": "^9.117.3",
+    "@react-three/fiber": "^8.17.14",
+    "axios": "^1.6.0",
     "next": "16.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "three": "^0.160.0",
-    "axios": "^1.6.0"
+    "three": "^0.160.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -27,4 +30,3 @@
     "typescript": "^5"
   }
 }
-

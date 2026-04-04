@@ -25,6 +25,10 @@ export default function Scene3D() {
                 <Canvas
                     camera={{ position: [15, 15, 15], fov: 50 }}
                     shadows
+                    gl={{ antialias: true }}
+                    onCreated={({ gl }) => {
+                        gl.setClearColor("#0f0a1e", 1);
+                    }}
                 >
                     {/* Lighting */}
                     <ambientLight intensity={0.6} />

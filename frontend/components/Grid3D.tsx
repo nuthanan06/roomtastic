@@ -1,6 +1,7 @@
-'use client';
+"use client";
 
-import * as THREE from 'three';
+import "@react-three/fiber";
+import * as THREE from "three";
 import { Grid } from '@react-three/drei';
 import Walls from '@/components/Walls';
 

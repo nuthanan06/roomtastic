@@ -10,6 +10,12 @@ export type Placement = {
   position: [number, number, number];
   rotationY: number;
   scale: number;
+  /** When set, this piece is nested under another (decor on furniture). */
+  parentClientId?: string | null;
+  /** Transform relative to parent (required when parentClientId is set). */
+  localPosition?: [number, number, number];
+  localRotationY?: number;
+  localScale?: number;
 };
 
 const FALLBACK_GLB = "/mock-models/chair.glb";

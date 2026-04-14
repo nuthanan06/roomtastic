@@ -56,3 +56,5 @@ uploads/
 # Environment
 .env
 .env.local
+.sfdx/
+.trash/

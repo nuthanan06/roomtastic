@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/errors";
 import type { FurnitureOut, InventoryOut, RoomOut } from "@/lib/roomApiTypes";
-import RoomEditorClient from "@/components/room-editor/RoomEditorClient";
+import RoomEditorClient from "@/components/features/room-editor/RoomEditorClient";
 
 function LoadingEditor({ message, error }: { message: string; error: string | null }) {
   return (

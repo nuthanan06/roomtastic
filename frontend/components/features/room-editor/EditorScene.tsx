@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/immutability, react-hooks/refs */
+
 import {
   Suspense,
   useCallback,

@@ -1,36 +1,123 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Roomtastic Frontend
 
-## Getting Started
+Next.js App Router frontend for Roomtastic.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router)
+- React 19 + TypeScript
+- Tailwind CSS v4
+- Three.js + React Three Fiber + Drei
+
+## Run
 
 ```bash
+cd frontend
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Build check:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Frontend Structure
 
-## Learn More
+```text
+frontend/
+  app/                       # Routes (App Router)
+    page.tsx                 # Landing
+    lab/                     # Image→depth lab route
+    upload/                  # Upload route
+    rooms/                   # Room list/detail/edit routes
+    api/                     # Next.js route handlers
+  components/
+    ui/                      # Reusable primitive UI components (shadcn target)
+    features/
+      home/                  # Home/landing feature components
+      lab/                   # Image/depth lab feature components
+    room-editor/             # Room editor feature modules
+    mock-models-preview/     # Mock preview feature modules
+  lib/                       # API clients and shared utilities
+  public/                    # Static assets
+  types/                     # Global type declarations
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Component Organization Rules
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Put reusable primitives in `components/ui/`.
+2. Put feature-specific components in `components/features/<feature-name>/`.
+3. Keep route files in `app/` thin:
+- Page files should compose feature components.
+- Business logic should live in `lib/` or feature hooks.
+4. Keep 3D editor modules in `components/room-editor/` unless they are truly reusable across features.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Shadcn UI Adoption Guide
 
-## Deploy on Vercel
+This repo is prepared for shadcn-style abstraction.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Recommended Layout
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `components/ui/*`:
+  - shadcn base components (Button, Input, Dialog, Sheet, Form, etc.)
+- `components/features/*`:
+  - compositions of ui primitives + feature logic
+- `lib/`:
+  - API wrappers, helpers, adapters
+
+### Install (when ready)
+
+```bash
+cd frontend
+npx shadcn@latest init
+```
+
+Recommended answers:
+
+- TypeScript: yes
+- Tailwind: yes
+- Components path: `components/ui`
+- Utils path: `lib/utils.ts`
+
+Then add components as needed, for example:
+
+```bash
+npx shadcn@latest add button input form dialog sheet tabs
+```
+
+### Usage Pattern
+
+- Use `components/ui` for visual primitives.
+- Wrap/compose in feature components instead of importing shadcn directly in every page.
+- Keep form schemas and validation near feature boundaries, not inside primitives.
+
+## Forms and Reuse Pattern
+
+Suggested convention:
+
+```text
+components/features/auth/
+  LoginForm.tsx
+  RegisterForm.tsx
+  auth.schema.ts
+  auth.actions.ts
+```
+
+- `*.schema.ts`: zod schemas and types
+- `*.actions.ts`: API mutations
+- `*Form.tsx`: UI composition using `components/ui`
+
+## API Integration Notes
+
+- Use `lib/api.ts` for HTTP client setup.
+- Keep route-specific payload/response types in `lib/roomApiTypes.ts` or feature-local types.
+- Avoid hardcoding backend URLs in components; prefer env-driven clients.
+
+## Conventions
+
+- Use absolute imports via `@/`.
+- Keep files focused and feature-local.
+- Prefer composition over deeply nested prop drilling.
+- Add reusable UI only after a second real use case.

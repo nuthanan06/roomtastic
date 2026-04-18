@@ -6,9 +6,11 @@ import { getToken } from "@/lib/auth";
 
 export default function LandingHome() {
   const [hasSession, setHasSession] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setHasSession(!!getToken());
+    setMounted(true);
   }, []);
 
   return (
@@ -18,7 +20,7 @@ export default function LandingHome() {
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <span className="text-lg font-semibold tracking-tight text-white">Roomtastic</span>
           <nav className="flex items-center gap-3 text-sm">
-            {hasSession ? (
+            {mounted && hasSession ? (
               <Link
                 href="/rooms"
                 className="rounded-lg px-4 py-2 font-medium bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 shadow-lg shadow-violet-900/30"
@@ -27,10 +29,7 @@ export default function LandingHome() {
               </Link>
             ) : (
               <>
-                <Link
-                  href="/login"
-                  className="text-indigo-200/90 hover:text-white px-3 py-2"
-                >
+                <Link href="/login" className="text-indigo-200/90 hover:text-white px-3 py-2">
                   Log in
                 </Link>
                 <Link
@@ -112,7 +111,10 @@ export default function LandingHome() {
             <p className="mt-2 text-sm text-slate-400 leading-relaxed">
               Experimental depth preview from a single image. Separate from saved room layouts.
             </p>
-            <Link href="/lab" className="mt-4 inline-block text-sm font-medium text-indigo-300 hover:text-indigo-200">
+            <Link
+              href="/lab"
+              className="mt-4 inline-block text-sm font-medium text-indigo-300 hover:text-indigo-200"
+            >
               Open the lab →
             </Link>
           </div>

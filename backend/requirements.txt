@@ -6,13 +6,10 @@ opencv-python==4.7.0.72
 pillow==10.0.0
 requests==2.31.0
 
-tripo3d
 aiohttp
 fastapi
 uvicorn[standard]
 python-multipart
-selenium
-webdriver-manager
 
 # Room/Inventory CRUD API
 SQLAlchemy>=2.0

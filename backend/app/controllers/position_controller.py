@@ -24,7 +24,9 @@ def get_position(db: Session, position_id: int) -> Position:
     return p
 
 
-def update_position(db: Session, position_id: int, position_in: PositionUpdate) -> Position:
+def update_position(
+    db: Session, position_id: int, position_in: PositionUpdate
+) -> Position:
     p = get_position(db, position_id)
     data = position_in.model_dump(exclude_unset=True)
     for k, v in data.items():

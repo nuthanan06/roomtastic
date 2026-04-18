@@ -3,6 +3,7 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
+
 class FurnitureBase(BaseModel):
     name_of_furniture: Optional[str] = None
     coordinates: Optional[str] = None
@@ -11,11 +12,14 @@ class FurnitureBase(BaseModel):
     height: Optional[int] = None
     inventory_id: Optional[UUID] = None
 
+
 class FurnitureCreate(FurnitureBase):
     pass
 
+
 class FurnitureUpdate(FurnitureBase):
     pass
+
 
 class FurnitureOut(FurnitureBase):
     model_config = ConfigDict(from_attributes=True)

@@ -32,7 +32,9 @@ def create_inventory(db: Session, inventory_in: InventoryCreate) -> Inventory:
     return inv
 
 
-def update_inventory(db: Session, inventory_id: UUID, inventory_in: InventoryUpdate) -> Inventory:
+def update_inventory(
+    db: Session, inventory_id: UUID, inventory_in: InventoryUpdate
+) -> Inventory:
     inv = get_inventory(db, inventory_id)
     data = inventory_in.model_dump(exclude_unset=True)
     for k, v in data.items():

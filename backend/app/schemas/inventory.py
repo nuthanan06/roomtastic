@@ -3,6 +3,7 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
+
 class InventoryBase(BaseModel):
     name: str
     category: Optional[str] = None
@@ -18,11 +19,14 @@ class InventoryBase(BaseModel):
     source: Optional[str] = None
     source_id: Optional[str] = None
 
+
 class InventoryCreate(InventoryBase):
     pass
 
+
 class InventoryUpdate(InventoryBase):
     pass
+
 
 class InventoryOut(InventoryBase):
     model_config = ConfigDict(from_attributes=True)

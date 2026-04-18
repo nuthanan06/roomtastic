@@ -27,7 +27,9 @@ def read_position(position_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{position_id}", response_model=PositionOut)
-def patch_position(position_id: int, body: PositionUpdate, db: Session = Depends(get_db)):
+def patch_position(
+    position_id: int, body: PositionUpdate, db: Session = Depends(get_db)
+):
     p = ctrl.update_position(db, position_id, body)
     return PositionOut.model_validate(p)
 

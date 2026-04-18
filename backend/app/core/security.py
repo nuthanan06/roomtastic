@@ -1,4 +1,5 @@
 import os
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
@@ -6,7 +7,17 @@ from uuid import UUID
 import bcrypt
 from jose import JWTError, jwt
 
-AUTH_SECRET = os.getenv("AUTH_SECRET", "change-me-in-production")
+logger = logging.getLogger(__name__)
+
+AUTH_SECRET = os.getenv("AUTH_SECRET")
+if not AUTH_SECRET:
+    # Fail fast in production; generate a temporary one for development only
+    if os.getenv("ENVIRONMENT") == "production":
+        raise RuntimeError("AUTH_SECRET environment variable must be set in production")
+    logger.warning(
+        "⚠️  AUTH_SECRET not set; using temporary development secret. This is UNSAFE for production."
+    )
+    AUTH_SECRET = "temporary-dev-secret-change-me-in-production"
 AUTH_ALGORITHM = "HS256"
 AUTH_TOKEN_TTL_SECONDS = int(os.getenv("AUTH_TOKEN_TTL_SECONDS", "86400"))
 

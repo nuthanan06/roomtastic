@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 import uuid
 from .base import Base
 
+
 class User(Base):
     __tablename__ = "users"
     user_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -12,5 +13,5 @@ class User(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     password_hash = Column(Text, nullable=True)
     account_created = Column(DateTime)
-    last_loged_in = Column(DateTime)
+    last_logged_in = Column("last_loged_in", DateTime)
     rooms = relationship("Room", back_populates="user")

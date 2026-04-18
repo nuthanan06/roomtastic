@@ -6,6 +6,7 @@ from sqlalchemy.orm import relationship
 import uuid
 from .base import Base
 
+
 class Inventory(Base):
     __tablename__ = "inventory"
     inventory_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -23,5 +24,7 @@ class Inventory(Base):
     source = Column(String, nullable=True)
     source_id = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
     furnitures = relationship("Furniture", back_populates="inventory")

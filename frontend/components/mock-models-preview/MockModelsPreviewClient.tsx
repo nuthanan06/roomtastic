@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GRID_CELL } from "@/lib/gridSnap";
 import { MOCK_CATALOG } from "@/lib/mockCatalog";
 import { publicAssetUrl } from "@/lib/publicAssetUrl";
-import { normalizeClonedGltfRoot } from "@/components/room-editor/modelFit";
+import { normalizeClonedGltfRoot } from "@/components/features/room-editor/modelFit";
 
 function PreviewMesh({
   glbUrl,

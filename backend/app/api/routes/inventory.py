@@ -29,7 +29,9 @@ def create_inventory(body: InventoryCreate, db: Session = Depends(get_db)):
 
 
 @router.patch("/{inventory_id}", response_model=InventoryOut)
-def patch_inventory(inventory_id: UUID, body: InventoryUpdate, db: Session = Depends(get_db)):
+def patch_inventory(
+    inventory_id: UUID, body: InventoryUpdate, db: Session = Depends(get_db)
+):
     inv = ctrl.update_inventory(db, inventory_id, body)
     return InventoryOut.model_validate(inv)
 

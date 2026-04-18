@@ -6,7 +6,10 @@ from sqlalchemy.orm import Session
 from app.models.furniture import Furniture
 from app.models.lighting_furniture import LightingFurniture
 from app.models.room import Room
-from app.schemas.lighting_furniture import LightingFurnitureCreate, LightingFurnitureUpdate
+from app.schemas.lighting_furniture import (
+    LightingFurnitureCreate,
+    LightingFurnitureUpdate,
+)
 
 
 def create_lighting_for_room(
@@ -25,7 +28,9 @@ def create_lighting_for_room(
         .first()
     )
     if existing:
-        raise HTTPException(status_code=400, detail="Lighting already exists for this furniture")
+        raise HTTPException(
+            status_code=400, detail="Lighting already exists for this furniture"
+        )
     light = LightingFurniture(
         furniture_id=body.furniture_id,
         type=body.type,
@@ -38,7 +43,9 @@ def create_lighting_for_room(
     return light
 
 
-def update_lighting(db: Session, light_id: UUID, body: LightingFurnitureUpdate) -> LightingFurniture:
+def update_lighting(
+    db: Session, light_id: UUID, body: LightingFurnitureUpdate
+) -> LightingFurniture:
     light = db.get(LightingFurniture, light_id)
     if not light:
         raise HTTPException(status_code=404, detail="Light not found")

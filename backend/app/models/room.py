@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 import uuid
 from .base import Base
 
+
 class Room(Base):
     __tablename__ = "rooms"
     room_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

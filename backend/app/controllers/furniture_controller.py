@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.models.furniture import Furniture
 from app.models.room import Room
-from app.schemas.furniture import FurnitureCreate, FurnitureUpdate, FurnitureMoveBody, FurnitureRotateBody
+from app.schemas.furniture import (
+    FurnitureCreate,
+    FurnitureUpdate,
+    FurnitureMoveBody,
+    FurnitureRotateBody,
+)
 
 
 def _coords_dict(s: str | None) -> dict:
@@ -30,7 +35,9 @@ def _dump_coords(d: dict) -> str:
     return json.dumps(d)
 
 
-def create_furniture(db: Session, room_id: UUID, furniture_in: FurnitureCreate) -> Furniture:
+def create_furniture(
+    db: Session, room_id: UUID, furniture_in: FurnitureCreate
+) -> Furniture:
     if not db.get(Room, room_id):
         raise HTTPException(status_code=404, detail="Room not found")
     coords = furniture_in.coordinates or '{"x":0,"y":0,"z":0}'
@@ -55,11 +62,7 @@ def create_furniture(db: Session, room_id: UUID, furniture_in: FurnitureCreate) 
 def list_room_furniture(db: Session, room_id: UUID) -> list:
     if not db.get(Room, room_id):
         raise HTTPException(status_code=404, detail="Room not found")
-    return (
-        db.query(Furniture)
-        .filter(Furniture.room_id == room_id)
-        .all()
-    )
+    return db.query(Furniture).filter(Furniture.room_id == room_id).all()
 
 
 def get_furniture_one(db: Session, furniture_id: UUID) -> Furniture:
@@ -69,7 +72,9 @@ def get_furniture_one(db: Session, furniture_id: UUID) -> Furniture:
     return f
 
 
-def update_furniture(db: Session, furniture_id: UUID, furniture_in: FurnitureUpdate) -> Furniture:
+def update_furniture(
+    db: Session, furniture_id: UUID, furniture_in: FurnitureUpdate
+) -> Furniture:
     f = get_furniture_one(db, furniture_id)
     data = furniture_in.model_dump(exclude_unset=True)
     for k, v in data.items():
@@ -87,7 +92,9 @@ def delete_furniture(db: Session, furniture_id: UUID) -> None:
     db.commit()
 
 
-def move_furniture(db: Session, furniture_id: UUID, body: FurnitureMoveBody) -> Furniture:
+def move_furniture(
+    db: Session, furniture_id: UUID, body: FurnitureMoveBody
+) -> Furniture:
     f = get_furniture_one(db, furniture_id)
     c = _coords_dict(f.coordinates)
     if body.x is not None:
@@ -104,7 +111,9 @@ def move_furniture(db: Session, furniture_id: UUID, body: FurnitureMoveBody) -> 
     return f
 
 
-def rotate_furniture(db: Session, furniture_id: UUID, body: FurnitureRotateBody) -> Furniture:
+def rotate_furniture(
+    db: Session, furniture_id: UUID, body: FurnitureRotateBody
+) -> Furniture:
     f = get_furniture_one(db, furniture_id)
     f.rotation = body.rotation
     f.updated_at = datetime.utcnow()

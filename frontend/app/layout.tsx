@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import QueryProvider from "./query-provider";
 
 const appSans = Plus_Jakarta_Sans({
   variable: "--font-app-sans",
@@ -28,7 +29,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${appSans.variable} ${appMono.variable} font-sans antialiased`}>{children}</body>
+      <body className={`${appSans.variable} ${appMono.variable} font-sans antialiased`}>
+        <QueryProvider>{children}</QueryProvider>
+      </body>
     </html>
   );
 }

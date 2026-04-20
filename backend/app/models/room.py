@@ -17,5 +17,4 @@ class Room(Base):
     last_edited = Column(DateTime)
     user = relationship("User", back_populates="rooms")
     furniture = relationship("Furniture", back_populates="room")
-    windows = relationship("Window", back_populates="room")
-    doors = relationship("Door", back_populates="room")
+    openings = relationship("Opening", back_populates="room")

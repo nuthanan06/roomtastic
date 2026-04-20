@@ -22,15 +22,6 @@ def create_lighting_for_room(
     furn = db.get(Furniture, body.furniture_id)
     if not furn or furn.room_id != room_id:
         raise HTTPException(status_code=400, detail="Furniture not in this room")
-    existing = (
-        db.query(LightingFurniture)
-        .filter(LightingFurniture.furniture_id == body.furniture_id)
-        .first()
-    )
-    if existing:
-        raise HTTPException(
-            status_code=400, detail="Lighting already exists for this furniture"
-        )
     light = LightingFurniture(
         furniture_id=body.furniture_id,
         type=body.type,
@@ -50,6 +41,21 @@ def update_lighting(
     if not light:
         raise HTTPException(status_code=404, detail="Light not found")
     data = body.model_dump(exclude_unset=True)
+    if "furniture_id" in data:
+        new_furniture_id = data["furniture_id"]
+        if not new_furniture_id:
+            raise HTTPException(status_code=400, detail="furniture_id cannot be null")
+        new_furniture = db.get(Furniture, new_furniture_id)
+        if not new_furniture:
+            raise HTTPException(status_code=400, detail="Furniture not found")
+        current_furniture = (
+            db.get(Furniture, light.furniture_id) if light.furniture_id else None
+        )
+        if current_furniture and new_furniture.room_id != current_furniture.room_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Furniture reassignment must stay within the same room",
+            )
     for k, v in data.items():
         setattr(light, k, v)
     db.add(light)

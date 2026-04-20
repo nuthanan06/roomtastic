@@ -15,6 +15,20 @@ from app.schemas.furniture import (
 )
 
 
+def _normalize_tags(raw: list[str] | None) -> list[str]:
+    if not raw:
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    for tag in raw:
+        t = (tag or "").strip().lower()
+        if not t or t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+    return out
+
+
 def _coords_dict(s: str | None) -> dict:
     if not s:
         return {"x": 0.0, "y": 0.0, "z": 0.0}
@@ -50,6 +64,7 @@ def create_furniture(
         rotation=furniture_in.rotation or 0,
         width=furniture_in.width or 0,
         height=furniture_in.height or 0,
+        tags=_normalize_tags(furniture_in.tags),
         created_at=now,
         updated_at=now,
     )
@@ -77,6 +92,8 @@ def update_furniture(
 ) -> Furniture:
     f = get_furniture_one(db, furniture_id)
     data = furniture_in.model_dump(exclude_unset=True)
+    if "tags" in data:
+        data["tags"] = _normalize_tags(data.get("tags"))
     for k, v in data.items():
         setattr(f, k, v)
     f.updated_at = datetime.utcnow()

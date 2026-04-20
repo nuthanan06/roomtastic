@@ -58,6 +58,11 @@ import type { RoomOpening, WallKey } from "./roomOpenings";
 const WALL_INSET = 0.055;
 const WALL_FADE_MARGIN = 0.48;
 
+/**
+ * Calculates X position along a wall (e.g., back wall).
+ * Maps normalized parameter t ∈ [0,1] to world X, constrained by room width and opening width.
+ * Used to position doors/windows along walls.
+ */
 function alongWallX(t: number, roomW: number, openingW: number): number {
   const hw = roomW / 2;
   const lo = -hw + openingW / 2 + 0.06;
@@ -65,6 +70,11 @@ function alongWallX(t: number, roomW: number, openingW: number): number {
   return lo + t * Math.max(0.01, hi - lo);
 }
 
+/**
+ * Calculates Z position along a wall (e.g., side wall).
+ * Maps normalized parameter t ∈ [0,1] to world Z, constrained by room length and opening width.
+ * Used to position doors/windows along walls.
+ */
 function alongWallZ(t: number, roomL: number, openingW: number): number {
   const hl = roomL / 2;
   const lo = -hl + openingW / 2 + 0.06;
@@ -72,6 +82,12 @@ function alongWallZ(t: number, roomL: number, openingW: number): number {
   return lo + t * Math.max(0.01, hi - lo);
 }
 
+/**
+ * Fades walls when camera is near them (so you can see inside the room).
+ * Each frame: checks if camera is within WALL_FADE_MARGIN of a wall, and if so,
+ * reduces opacity and disables depthWrite so the wall becomes semi-transparent.
+ * Creates the illusion of entering/exiting rooms without culling geometry.
+ */
 function WallAdaptiveFade({
   roomW,
   roomL,
@@ -100,6 +116,10 @@ function WallAdaptiveFade({
   return null;
 }
 
+/**
+ * Renders one opening fixture (door or window) on a wall.
+ * Includes: opening void plane + trim frame, with per-wall position/rotation handling.
+ */
 function OpeningFixture({
   opening,
   roomW,
@@ -183,6 +203,7 @@ function OpeningFixture({
   );
 }
 
+/** Renders all current room openings by mapping each `RoomOpening` into one fixture. */
 function RoomOpeningsLayer({
   openings,
   roomW,
@@ -516,7 +537,7 @@ function PlacementWarmGlow({ yBulb = 0.82 }: { yBulb?: number }) {
         />
       </mesh>
       <mesh position={[0, yBulb, 0]} scale={1.75} renderOrder={49}>
-        <sphereGeometry args={[0.1, 14,14]} />
+        <sphereGeometry args={[0.1, 14, 14]} />
         <meshBasicMaterial
           color="#fbbf24"
           transparent
@@ -530,6 +551,16 @@ function PlacementWarmGlow({ yBulb = 0.82 }: { yBulb?: number }) {
   );
 }
 
+/**
+ * Renders a single placed furniture model in 3D space.
+ * Responsibilities:
+ * - Load and clone the GLB model, normalize it (scale + position on floor)
+ * - Deep clone materials to allow per-instance colors (selected/highlighted states)
+ * - Apply highlight overlays (green tint for selected, teal tint for secondary selected)
+ * - Handle parenting: if p.parentClientId is set, position relative to parent; else use world position
+ * - Wrap in TransformControls for drag/rotate/scale interactions
+ * - Track selection state: swap materials on select/deselect
+ */
 function PlacedModelContent({ p, highlight }: { p: Placement; highlight: SelectionHighlight }) {
   const glbSrc = useMemo(() => publicAssetUrl(p.glbUrl), [p.glbUrl]);
   const { scene } = useGLTF(glbSrc);
@@ -538,7 +569,7 @@ function PlacedModelContent({ p, highlight }: { p: Placement; highlight: Selecti
     normalizeClonedGltfRoot(c);
     deepCloneMaterialsForMeshes(c);
     return c;
-  }, [scene, glbSrc]);
+  }, [scene]);
 
   useLayoutEffect(() => {
     const green = new THREE.Color("#22c55e");
@@ -577,7 +608,11 @@ function PlacementBranch({
   const group = useRef<THREE.Group>(null);
   const children = useMemo(() => childPlacements(placements, p.clientId), [placements, p.clientId]);
   const highlight: SelectionHighlight =
-    p.clientId === selectedId ? "primary" : p.clientId === secondarySelectedId ? "secondary" : "none";
+    p.clientId === selectedId
+      ? "primary"
+      : p.clientId === secondarySelectedId
+        ? "secondary"
+        : "none";
 
   const isRootTree = !p.parentClientId;
   const pos: [number, number, number] = isRootTree ? p.position : (p.localPosition ?? [0, 0, 0]);
@@ -829,7 +864,8 @@ function SceneInner({
   placementsRef.current = placements;
 
   const [, forceRerender] = useReducer((n: number) => n + 1, 0);
-  const [dragMeasuredFootprint, setDragMeasuredFootprint] = useState<ModelFootprint>(DEFAULT_MODEL_FOOTPRINT);
+  const [dragMeasuredFootprint, setDragMeasuredFootprint] =
+    useState<ModelFootprint>(DEFAULT_MODEL_FOOTPRINT);
 
   const roomHalfW = roomW / 2;
   const roomHalfL = roomL / 2;
@@ -962,9 +998,20 @@ function SceneInner({
     const obj = objectMap.current.get(selectedId);
     if (!obj) return;
     const good = transformGoodRef.current;
-    if (!placementTransformAllowed(obj, selectedId, objectMap.current, placements, roomHalfW, roomHalfL)) {
+    if (
+      !placementTransformAllowed(
+        obj,
+        selectedId,
+        objectMap.current,
+        placements,
+        roomHalfW,
+        roomHalfL,
+      )
+    ) {
       if (good) applyTransformSnapshot(obj, good);
-      onInterference?.("Can’t move there — it would overlap another piece or stick through the walls.");
+      onInterference?.(
+        "Can’t move there — it would overlap another piece or stick through the walls.",
+      );
     } else {
       transformGoodRef.current = snapshotTransform(obj);
       onInterference?.(null);
@@ -981,13 +1028,31 @@ function SceneInner({
     obj.position.x = sx;
     obj.position.z = sz;
     clampObjectToFloorAndRoom(obj, roomHalfW, roomHalfL);
-    if (!placementTransformAllowed(obj, selectedId, objectMap.current, placements, roomHalfW, roomHalfL)) {
+    if (
+      !placementTransformAllowed(
+        obj,
+        selectedId,
+        objectMap.current,
+        placements,
+        roomHalfW,
+        roomHalfL,
+      )
+    ) {
       const g = transformGoodRef.current;
       if (g) applyTransformSnapshot(obj, g);
       onInterference?.("Can’t place there — overlaps another object or the room edge.");
     } else {
       settleOntoSupportBelow(obj, selectedId, objectMap.current, placements, roomHalfW, roomHalfL);
-      if (!placementTransformAllowed(obj, selectedId, objectMap.current, placements, roomHalfW, roomHalfL)) {
+      if (
+        !placementTransformAllowed(
+          obj,
+          selectedId,
+          objectMap.current,
+          placements,
+          roomHalfW,
+          roomHalfL,
+        )
+      ) {
         const g = transformGoodRef.current;
         if (g) applyTransformSnapshot(obj, g);
         onInterference?.("Can’t settle that stack without overlapping something else.");
@@ -1027,7 +1092,13 @@ function SceneInner({
       <ambientLight intensity={0.5} color="#99a5e8" />
       <directionalLight position={[8, 14, 6]} intensity={1.05} castShadow color="#e8ecff" />
       <hemisphereLight args={["#3730a3", "#1e1b4b", 0.38]} />
-      <pointLight position={[0, roomH * 0.92, 0]} intensity={0.35} distance={Math.max(roomW, roomL) * 1.4} color="#c4b5fd" decay={2} />
+      <pointLight
+        position={[0, roomH * 0.92, 0]}
+        intensity={0.35}
+        distance={Math.max(roomW, roomL) * 1.4}
+        color="#c4b5fd"
+        decay={2}
+      />
 
       <EditorFloor
         roomW={roomW}
@@ -1148,6 +1219,24 @@ function SceneInner({
   );
 }
 
+/**
+ * MAIN 3D CANVAS SCENE COMPONENT
+ * Renders the interactive 3D room editor using Three.js + React Three Fiber.
+ *
+ * Responsibilities:
+ * - Render floor grid, walls, doors/windows, furniture models
+ * - Handle mouse interactions: ray-casting for selection, drag-to-place, transform mode controls
+ * - Manage drag/drop drop preview (visual footprint cells + hover ring at drop position)
+ * - Sync 3D transforms back to parent via RoomEditorSceneActions (position/rotation/scale)
+ * - Validate placements via collision detection (clamp to bounds, check overlaps, settle on support)
+ * - Support parent-child grouping (local transforms when piece sits on another)
+ * - Provide HUD overlay (world coords + screen coords of selected object)
+ * - Fade walls when camera gets close (inward-facing fade)
+ * - Bridge canvas ↔ HTML overlay via mutable ref (for drag/drop from catalog)
+ *
+ * Inputs: room dimensions, colors, textures, placements, selections, drag state, doors/windows, transform mode
+ * Outputs: modified placements (via setPlacements callback), selection changes, export transforms via ref
+ */
 export function EditorScene({
   roomW,
   roomL,

@@ -15,6 +15,19 @@
   - `Base.metadata.create_all(bind=get_engine())`
 - This creates tables for all models exported by `backend/app/models/__init__.py`.
 
+## Schema Update Path (Current)
+
+This repository currently uses script-based schema upgrades, not Alembic-managed revisions.
+
+- Non-destructive updates for existing DBs:
+  - `python backend/scripts/apply_schema_updates.py`
+- Full local reset (destructive):
+  - `RESET_DB_CONFIRM=YES python backend/scripts/reset_db.py`
+
+Notes:
+- `create_all()` creates missing tables but does not safely evolve existing tables.
+- Use `apply_schema_updates.py` when columns were added to models and DB already exists.
+
 ## Tables
 
 ### users
@@ -82,6 +95,7 @@ Columns:
 - `url_link` (String)
 - `source` (String, nullable)
 - `source_id` (String, nullable)
+- `tags` (JSON, required, default `[]`)
 - `created_at` (DateTime, required)
 - `updated_at` (DateTime, required)
 
@@ -100,26 +114,27 @@ Columns:
 - `rotation` (Integer)
 - `width` (Integer)
 - `height` (Integer)
+- `tags` (JSON, required, default `[]`)
 - `created_at` (DateTime, required)
 - `updated_at` (DateTime, required)
 
 Relationships:
 - many-to-one to `rooms`
 - many-to-one to `inventory`
-- one-to-one to `lighting_furniture` via unique FK on lighting table
+- one-to-one/optional extension to `lighting_furniture`
 
 ### lighting_furniture
 Defined in `backend/app/models/lighting_furniture.py`
 
 Columns:
 - `id` (UUID, PK)
-- `furniture_id` (UUID, FK -> furniture.furniture_id, unique)
+- `furniture_id` (UUID, FK -> furniture.furniture_id)
 - `type` (String)
 - `intensity` (Float)
 - `color_temperature` (Integer)
 
 Relationships:
-- one-to-one to `furniture`
+- one-to-one extension row for light-capable furniture (via `furniture_id`)
 
 ### windows
 Defined in `backend/app/models/window.py`
@@ -131,10 +146,19 @@ Columns:
 - `width` (Integer)
 - `height` (Integer)
 - `sill_height` (Integer)
+- `wall` (String, nullable; one of `pz|nz|px|nx`)
+- `t` (Float, nullable; normalized 0..1 along wall)
+- `width_m` (Float, nullable)
+- `height_m` (Float, nullable)
+- `sill_m` (Float, nullable)
 
 Relationships:
 - many-to-one to `rooms`
 - many-to-one to `positions`
+
+Note:
+- `position_id` is retained for compatibility during migration window.
+- New editor sync uses `wall+t+*_m` fields as canonical opening representation.
 
 ### doors
 Defined in `backend/app/models/door.py`
@@ -147,10 +171,19 @@ Columns:
 - `height` (Integer)
 - `rotation` (Integer)
 - `swing_direction` (String)
+- `wall` (String, nullable; one of `pz|nz|px|nx`)
+- `t` (Float, nullable; normalized 0..1 along wall)
+- `width_m` (Float, nullable)
+- `height_m` (Float, nullable)
+- `sill_m` (Float, nullable)
 
 Relationships:
 - many-to-one to `rooms`
 - many-to-one to `positions`
+
+Note:
+- `position_id` is retained for compatibility during migration window.
+- New editor sync uses `wall+t+*_m` fields as canonical opening representation.
 
 ### jobs
 Defined in `backend/app/models/job.py`
@@ -180,11 +213,21 @@ Current job type in active use:
 - positions 1 -> many windows
 - positions 1 -> many doors
 - inventory 1 -> many furniture
-- furniture 1 -> 1 lighting_furniture
+- furniture 1 -> 0/1 lighting_furniture (extension)
 - jobs is standalone queue table
+
+## Sync and Controller Notes
+
+- Room editor now uses transactional room layout sync endpoint:
+  - `PATCH /api/rooms/{room_id}/layout`
+  - Syncs room patch + furniture upserts/deletes + openings upserts/deletes in one transaction.
+- Door and window CRUD logic is consolidated in shared controller logic:
+  - `backend/app/controllers/openings_controller.py`
+  - `door_controller.py` and `window_controller.py` are compatibility wrappers.
 
 ## Notes
 
 - UUID PKs are used for most domain entities; `positions` uses integer PK.
 - `coordinates` in `furniture` is stored as text, not JSONB.
-- Schema/table migrations currently rely on `create_all`, not Alembic migrations.
+- Schema evolution currently uses `backend/scripts/apply_schema_updates.py`.
+- `positions` remains present for compatibility and is planned to be phased out after migration window.

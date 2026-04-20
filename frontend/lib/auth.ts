@@ -33,4 +33,3 @@ export function getStoredUser(): StoredUser | null {
     return null;
   }
 }
-

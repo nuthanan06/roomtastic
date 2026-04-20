@@ -33,6 +33,14 @@
 /* Room editor & dashboards: tight, readable section labels */
 @layer components {
   .rt-editor-heading {
-    @apply text-[0.68rem] font-semibold uppercase tracking-[0.14em];
+    @apply text-[0.68rem] font-semibold tracking-[0.14em] uppercase;
+  }
+
+  .rt-app-shell {
+    @apply bg-linear-to-br from-slate-950 via-indigo-950 to-violet-950 text-slate-100;
+  }
+
+  .rt-app-shell-glow {
+    @apply pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(139,92,246,0.25),transparent)];
   }
 }

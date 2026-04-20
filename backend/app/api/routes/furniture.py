@@ -20,6 +20,7 @@ router = APIRouter(tags=["furniture"])
 def create_furniture(
     room_id: UUID, body: FurnitureCreate, db: Session = Depends(get_db)
 ):
+    """Create a furniture record inside a room from the JSON payload in `body`."""
     f = ctrl.create_furniture(db, room_id, body)
     return FurnitureOut.model_validate(f)
 

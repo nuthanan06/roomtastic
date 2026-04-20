@@ -44,7 +44,7 @@ def login(body: AuthLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == body.email).first()
     if not user or not verify_password(body.password, user.password_hash or ""):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    user.last_loged_in = datetime.utcnow()
+    user.last_logged_in = datetime.utcnow()
     db.add(user)
     db.commit()
     db.refresh(user)

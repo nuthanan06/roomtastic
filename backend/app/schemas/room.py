@@ -27,5 +27,4 @@ class RoomOut(RoomBase):
     user_id: UUID
     last_edited: Optional[datetime] = None
     furniture: Optional[List[UUID]] = None
-    windows: Optional[List[UUID]] = None
-    doors: Optional[List[UUID]] = None
+    openings: Optional[List[UUID]] = None

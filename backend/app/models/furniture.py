@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
@@ -17,12 +17,11 @@ class Furniture(Base):
     rotation = Column(Integer)
     width = Column(Integer)
     height = Column(Integer)
+    tags = Column(JSON, nullable=False, default=list)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
     room = relationship("Room", back_populates="furniture")
     inventory = relationship("Inventory", back_populates="furnitures")
-    lighting = relationship(
-        "LightingFurniture", back_populates="furniture", uselist=False
-    )
+    lighting = relationship("LightingFurniture", back_populates="furniture", uselist=False)

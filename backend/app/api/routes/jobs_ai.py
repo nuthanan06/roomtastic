@@ -15,6 +15,7 @@ router = APIRouter(tags=["jobs", "ai"])
 
 
 def _enqueue(db: Session, job_type: str, payload: dict) -> Job:
+    # TODO(redis): replace DB polling queue with Redis queue once worker architecture migrates.
     now = datetime.utcnow()
     j = Job(
         type=job_type,

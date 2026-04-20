@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.user import User
+from app.schemas.layout import RoomLayoutSyncBody, RoomLayoutSyncOut
 from app.schemas.room import RoomCreate, RoomUpdate, RoomOut
 from app.schemas.inventory import InventoryOut
 from app.controllers import room_controller as ctrl
@@ -31,13 +32,13 @@ def create_room(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    # Ensure the room is created for the authenticated user
-    room = ctrl.create_room(db, body)
-    if room.user_id != current_user.user_id:
+    # Validate ownership before insert so unauthorized rows are never created.
+    if body.user_id != current_user.user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot create rooms for other users",
         )
+    room = ctrl.create_room(db, body)
     return room_to_out(room)
 
 
@@ -62,6 +63,17 @@ def patch_room(
     _check_room_ownership(room_id, current_user, db)
     room = ctrl.update_room(db, room_id, body)
     return room_to_out(room)
+
+
+@router.patch("/{room_id}/layout", response_model=RoomLayoutSyncOut)
+def patch_room_layout(
+    room_id: UUID,
+    body: RoomLayoutSyncBody,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    _check_room_ownership(room_id, current_user, db)
+    return ctrl.sync_room_layout(db, room_id, body)
 
 
 @router.delete("/{room_id}")

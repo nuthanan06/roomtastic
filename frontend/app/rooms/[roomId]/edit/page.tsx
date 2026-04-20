@@ -1,20 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/api";
-import { getToken } from "@/lib/auth";
-import { getErrorMessage } from "@/lib/errors";
-import type { FurnitureOut, InventoryOut, RoomOut } from "@/lib/roomApiTypes";
+import { useEffect, useMemo } from "react";
 import RoomEditorClient from "@/components/features/room-editor/RoomEditorClient";
+import {
+  openingOutToOpening,
+  type RoomOpening,
+} from "@/components/features/room-editor/roomOpenings";
+import { useRoomEditorQueries } from "@/hooks/useRoomQueries";
+import { getToken } from "@/lib/auth";
+import { getErrorMessage } from "@/utils/errors";
 
 function LoadingEditor({ message, error }: { message: string; error: string | null }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-indigo-200">
+    <div className="flex min-h-screen items-center justify-center bg-slate-950 text-indigo-200">
       <div className="text-center">
         <p>{message}</p>
-        {error && <p className="mt-2 text-red-400 text-sm">{error}</p>}
+        {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
         <Link href="/rooms" className="mt-4 inline-block text-violet-400 underline">
           Back to rooms
         </Link>
@@ -23,64 +26,56 @@ function LoadingEditor({ message, error }: { message: string; error: string | nu
   );
 }
 
+function isRoomOpening(value: RoomOpening | null): value is RoomOpening {
+  return value !== null;
+}
+
 export default function EditRoomPage() {
   const router = useRouter();
   const params = useParams<{ roomId: string }>();
   const roomId = params.roomId;
 
-  const [bootstrapped, setBootstrapped] = useState(false);
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const [room, setRoom] = useState<RoomOut | null>(null);
-  const [furniture, setFurniture] = useState<FurnitureOut[]>([]);
-  const [inventory, setInventory] = useState<InventoryOut[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const sessionToken = useMemo(() => getToken(), []);
 
   useEffect(() => {
-    const t = getToken();
-    if (!t) {
+    if (!sessionToken) {
       router.replace("/login");
-      return;
     }
-    setSessionToken(t);
-    setBootstrapped(true);
-    setLoading(true);
-    setError(null);
-    (async () => {
-      try {
-        const [r, furn, inv] = await Promise.all([
-          apiFetch<RoomOut>(`/rooms/${roomId}`, { token: t }),
-          apiFetch<FurnitureOut[]>(`/rooms/${roomId}/furniture`, { token: t }),
-          apiFetch<InventoryOut[]>(`/inventory`, { token: t }),
-        ]);
-        setRoom(r);
-        setFurniture(furn);
-        setInventory(inv);
-      } catch (e: unknown) {
-        setError(getErrorMessage(e));
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [roomId, router]);
+  }, [router, sessionToken]);
 
-  if (!bootstrapped) {
-    return <LoadingEditor message="Loading editor…" error={null} />;
+  const { roomQuery, furnitureQuery, openingsQuery } = useRoomEditorQueries(roomId, sessionToken);
+
+  const loading =
+    !!sessionToken &&
+    (roomQuery.isLoading || furnitureQuery.isLoading || openingsQuery.isLoading);
+
+  const room = roomQuery.data ?? null;
+  const furniture = furnitureQuery.data ?? [];
+  const openings = (openingsQuery.data ?? []).map(openingOutToOpening).filter(isRoomOpening);
+
+  const error = roomQuery.error ?? furnitureQuery.error ?? openingsQuery.error;
+  const errorMessage = error ? getErrorMessage(error) : null;
+
+  if (!sessionToken) {
+    return <LoadingEditor message="Redirecting to login..." error={null} />;
   }
 
   if (loading || !room) {
     return (
-      <LoadingEditor message={loading ? "Loading editor…" : "Room not found."} error={error} />
+      <LoadingEditor
+        message={loading ? "Loading editor..." : "Room not found."}
+        error={errorMessage}
+      />
     );
   }
 
   return (
     <RoomEditorClient
       roomId={roomId}
-      token={sessionToken!}
+      token={sessionToken}
       room={room}
       initialFurniture={furniture}
-      inventory={inventory}
+      initialOpenings={openings}
     />
   );
 }

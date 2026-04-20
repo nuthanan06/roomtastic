@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, UserUpdate, UserOut
+from app.schemas.user import UserUpdate, UserOut
+from app.schemas.room import RoomOut
 from app.controllers import user_controller as ctrl
 from app.api.serialize import user_to_out, room_to_out
 from app.api.deps import get_current_user
@@ -14,14 +15,7 @@ from app.api.deps import get_current_user
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.post("", response_model=UserOut)
-def create_user(body: UserCreate, db: Session = Depends(get_db)):
-    """Create a new user (registration endpoint, no auth required)"""
-    user = ctrl.create_user(db, body)
-    return user_to_out(user)
-
-
-@router.get("/{user_id}/rooms", response_model=list)
+@router.get("/{user_id}/rooms", response_model=list[RoomOut])
 def user_rooms(
     user_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],

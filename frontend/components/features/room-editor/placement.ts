@@ -1,5 +1,5 @@
-import type { FurnitureOut, InventoryOut } from "@/lib/roomApiTypes";
 import { parseCoordsJson } from "@/lib/gridSnap";
+import type { FurnitureOut, InventoryOut } from "@/types/api";
 
 export type Placement = {
   clientId: string;
@@ -20,21 +20,14 @@ export type Placement = {
 
 const FALLBACK_GLB = "/mock-models/chair.glb";
 
-export function inventoryToGlb(inv: { model_url?: string | null } | null | undefined): string {
-  const u = inv?.model_url;
-  if (
-    u &&
-    (u.endsWith(".glb") ||
-      u.endsWith(".gltf") ||
-      u.includes("/api/mock-models/") ||
-      u.includes("/mock-models/"))
-  ) {
-    return u;
-  }
-  return FALLBACK_GLB;
-}
-
-export function furnitureToPlacement(f: FurnitureOut, invById: Map<string, InventoryOut>): Placement {
+/**
+ * Main hydration path from backend furniture rows -> in-editor placement model.
+ * Keeps world transforms in meters/radians and resolves model URL via inventory fallback.
+ */
+export function furnitureToPlacement(
+  f: FurnitureOut,
+  invById: Map<string, InventoryOut>,
+): Placement {
   const c = parseCoordsJson(f.coordinates);
   const inv = f.inventory_id ? invById.get(f.inventory_id) : undefined;
   return {
@@ -43,12 +36,16 @@ export function furnitureToPlacement(f: FurnitureOut, invById: Map<string, Inven
     inventoryId: f.inventory_id,
     glbUrl: inventoryToGlb(inv),
     label: f.name_of_furniture || "Item",
-    position: [c.x, c.y, c.z],
+    position: [0, 0, 0],
     rotationY: ((f.rotation ?? 0) * Math.PI) / 180,
     scale: c.scale ?? 1,
   };
 }
 
+/**
+ * Main creation path for catalog drops.
+ * Spawn as root placement; scene logic later resolves free X/Z and support Y.
+ */
 export function newPlacementFromCatalog(opts: {
   glbUrl: string;
   label: string;
@@ -56,15 +53,25 @@ export function newPlacementFromCatalog(opts: {
   x: number;
   z: number;
 }): Placement {
-  /** y=0: PlacedModel normalizes GLB so its bottom sits on the floor */
-  const y = 0;
   return {
     clientId: crypto.randomUUID(),
     inventoryId: opts.inventoryId ?? null,
     glbUrl: opts.glbUrl,
     label: opts.label,
-    position: [opts.x, y, opts.z],
+    position: [0, 0, 0],
     rotationY: 0,
     scale: 1,
   };
+}
+
+/** Resolves a backend inventory row to a loader-safe GLB URL with fallback. */
+export function inventoryToGlb(inv: { model_url?: string | null } | null | undefined): string {
+  const u = inv?.model_url;
+  if (
+    u &&
+    (u.endsWith(".glb") || u.endsWith(".gltf") || u.includes("/mock-models/"))
+  ) {
+    return u;
+  }
+  return FALLBACK_GLB;
 }

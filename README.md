@@ -10,9 +10,8 @@ https://www.figma.com/design/NJU5xCb5fPaGaTzim6RJBY/roomtastic-planning?node-id=
 
 ## Current Scope
 
-- Image depth processing endpoint (`/api/process-image`) is active.
 - Hunyuan generation is represented as a queued job type (`hunyuan.generate`) but worker execution is intentionally not implemented yet.
-- Legacy Meshy and web scraping flows were removed from active API behavior.
+- Legacy depth/scraping flows were removed from active API behavior.
 
 ## Tech Stack
 
@@ -28,7 +27,6 @@ frontend (Next.js)
 
 backend (FastAPI)
   -> CRUD/domain routes
-  -> legacy depth route (/api/process-image)
   -> jobs enqueue route (/api/jobs/hunyuan/generate)
 
 postgresql
@@ -59,7 +57,6 @@ Implemented under `/api`:
   - `POST /api/auth/login`
   - `GET /api/auth/me`
 - Users
-  - `POST /api/users`
   - `GET /api/users/{user_id}`
   - `PATCH /api/users/{user_id}`
   - `DELETE /api/users/{user_id}`
@@ -113,6 +110,34 @@ pip install -r requirements.txt
 python3 main.py
 ```
 
+### Backend Migrations (Alembic)
+
+Schema is managed by Alembic.
+
+Apply migrations:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+Create a new migration after model changes:
+
+```bash
+cd backend
+alembic revision --autogenerate -m "describe_change"
+```
+
+Roll back one migration:
+
+```bash
+cd backend
+alembic downgrade -1
+```
+
+Docker backend startup runs `alembic upgrade head` automatically via
+`backend/scripts/docker-start.sh`.
+
 ### Frontend
 
 ```bash
@@ -133,9 +158,8 @@ python3 worker.py
 - Database and model docs: `documentation/database-structure.md`
 - Schema reference: `documentation/schema-reference.md`
 - Frontend organization guide: `frontend/README.md`
-- Frontend architecture notes: `frontend/docs/architecture.md`
+- Frontend architecture notes: `documentation/frontend-architecture.md`
 
 ## Notes
 
-- `/api/process-url` is intentionally disabled and returns HTTP 410.
 - If you change model/schema fields, update files in `documentation/` in the same PR.

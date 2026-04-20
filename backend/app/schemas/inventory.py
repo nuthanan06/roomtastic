@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
@@ -18,6 +18,7 @@ class InventoryBase(BaseModel):
     url_link: Optional[str] = None
     source: Optional[str] = None
     source_id: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class InventoryCreate(InventoryBase):

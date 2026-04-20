@@ -1,16 +1,36 @@
 import * as THREE from "three";
 import type { Placement } from "./placement";
 
+/** Fast lookup helper used across selection/grouping flows. */
 export function placementById(placements: Placement[], id: string): Placement | undefined {
   return placements.find((p) => p.clientId === id);
 }
 
-/** True if `ancestorId` appears somewhere above `nodeId` on the parent chain. */
-export function isAncestorOf(
+/** Primary grouping read path: roots are floor-level pieces with no parent. */
+export function rootPlacements(placements: Placement[]): Placement[] {
+  return placements.filter((p) => !p.parentClientId);
+}
+
+/** Primary grouping read path: children attached under a specific parent id. */
+export function childPlacements(placements: Placement[], parentId: string): Placement[] {
+  return placements.filter((p) => p.parentClientId === parentId);
+}
+
+/**
+ * Prevents invalid parent assignment.
+ * Returns true when parent <- child would create a loop in the hierarchy.
+ */
+export function wouldCreateCycle(
   placements: Placement[],
-  ancestorId: string,
-  nodeId: string,
+  parentId: string,
+  childId: string,
 ): boolean {
+  if (parentId === childId) return true;
+  return isAncestorOf(placements, childId, parentId);
+}
+
+/** True when `ancestorId` appears anywhere above `nodeId` in the parent chain. */
+export function isAncestorOf(placements: Placement[], ancestorId: string, nodeId: string): boolean {
   let cur: string | null | undefined = placementById(placements, nodeId)?.parentClientId ?? null;
   const seen = new Set<string>();
   while (cur) {
@@ -22,13 +42,10 @@ export function isAncestorOf(
   return false;
 }
 
-/** Attaching `childId` under `parentId` would create a cycle (e.g. parent lies under child today). */
-export function wouldCreateCycle(placements: Placement[], parentId: string, childId: string): boolean {
-  if (parentId === childId) return true;
-  return isAncestorOf(placements, childId, parentId);
-}
-
-/** World → parent-local decompose (Y-up, uniform scale from X). */
+/**
+ * Converts child world transform into parent-local transform.
+ * Keeps Y-up rotation convention and writes uniform local scale.
+ */
 export function computeLocalUnderParent(
   parentObj: THREE.Object3D,
   childObj: THREE.Object3D,
@@ -48,12 +65,4 @@ export function computeLocalUnderParent(
     localRotationY: euler.y,
     localScale: s,
   };
-}
-
-export function rootPlacements(placements: Placement[]): Placement[] {
-  return placements.filter((p) => !p.parentClientId);
-}
-
-export function childPlacements(placements: Placement[], parentId: string): Placement[] {
-  return placements.filter((p) => p.parentClientId === parentId);
 }

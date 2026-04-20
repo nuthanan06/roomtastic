@@ -12,10 +12,7 @@ export function canonicalModelUrlForLoader(raw: string): string {
 }
 
 function isMockModelPathname(pathname: string): boolean {
-  return (
-    /^\/api\/mock-models\/[a-z0-9_-]+$/i.test(pathname) ||
-    /^\/mock-models\/[a-z0-9_-]+\.glb$/i.test(pathname)
-  );
+  return /^\/mock-models\/[a-z0-9_-]+\.glb$/i.test(pathname);
 }
 
 export function isRecognizedModelUrl(raw: string): boolean {

@@ -6,10 +6,16 @@ import traceback
 import numpy as np
 
 # Set env before any imports
-os.environ["LD_LIBRARY_PATH"] = "/usr/lib/x86_64-linux-gnu:" + os.environ.get("LD_LIBRARY_PATH", "")
+os.environ["LD_LIBRARY_PATH"] = "/usr/lib/x86_64-linux-gnu:" + os.environ.get(
+    "LD_LIBRARY_PATH", ""
+)
 os.environ["HF_HOME"] = os.environ.get("HF_HOME", "/runpod-volume/cache")
-os.environ["HUGGINGFACE_HUB_CACHE"] = os.environ.get("HUGGINGFACE_HUB_CACHE", "/runpod-volume/cache/hy3dgen")
-os.environ["HF_MODULES_CACHE"] = os.environ.get("HF_MODULES_CACHE", "/workspace/Hunyuan3D-2/hy3dgen/texgen")
+os.environ["HUGGINGFACE_HUB_CACHE"] = os.environ.get(
+    "HUGGINGFACE_HUB_CACHE", "/runpod-volume/cache/hy3dgen"
+)
+os.environ["HF_MODULES_CACHE"] = os.environ.get(
+    "HF_MODULES_CACHE", "/workspace/Hunyuan3D-2/hy3dgen/texgen"
+)
 
 sys.path.insert(0, "/workspace/Hunyuan3D-2")
 
@@ -29,8 +35,12 @@ from hy3dgen.shapegen import (
 from hy3dgen.shapegen.pipelines import export_to_trimesh
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
-MODEL_PATH = os.environ.get("MODEL_PATH", "/runpod-volume/cache/hy3dgen/tencent/Hunyuan3D-2")
-TEX_MODEL_PATH = os.environ.get("TEX_MODEL_PATH", "/runpod-volume/cache/hy3dgen/tencent/Hunyuan3D-2")
+MODEL_PATH = os.environ.get(
+    "MODEL_PATH", "/runpod-volume/cache/hy3dgen/tencent/Hunyuan3D-2"
+)
+TEX_MODEL_PATH = os.environ.get(
+    "TEX_MODEL_PATH", "/runpod-volume/cache/hy3dgen/tencent/Hunyuan3D-2"
+)
 SUBFOLDER = os.environ.get("SUBFOLDER", "hunyuan3d-dit-v2-0")
 
 print("Loading models...", flush=True)
@@ -74,7 +84,10 @@ def generate(params: dict) -> dict:
     do_texture = params.get("texture", True)
     face_count = params.get("face_count", 40000)
 
-    print(f"Generating shape: steps={num_inference_steps} octree={octree_resolution} texture={do_texture}", flush=True)
+    print(
+        f"Generating shape: steps={num_inference_steps} octree={octree_resolution} texture={do_texture}",
+        flush=True,
+    )
 
     outputs = pipeline(
         image=image,

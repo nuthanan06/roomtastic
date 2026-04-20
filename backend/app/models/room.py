@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 import uuid
 from .base import Base
 
+
 class Room(Base):
     __tablename__ = "rooms"
     room_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -16,5 +17,4 @@ class Room(Base):
     last_edited = Column(DateTime)
     user = relationship("User", back_populates="rooms")
     furniture = relationship("Furniture", back_populates="room")
-    windows = relationship("Window", back_populates="room")
-    doors = relationship("Door", back_populates="room")
+    openings = relationship("Opening", back_populates="room")

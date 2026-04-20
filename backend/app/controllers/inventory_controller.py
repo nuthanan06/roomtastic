@@ -8,6 +8,20 @@ from app.models.inventory import Inventory
 from app.schemas.inventory import InventoryCreate, InventoryUpdate
 
 
+def _normalize_tags(raw: list[str] | None) -> list[str]:
+    if not raw:
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    for tag in raw:
+        t = (tag or "").strip().lower()
+        if not t or t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+    return out
+
+
 def list_inventory(db: Session) -> list:
     return db.query(Inventory).order_by(Inventory.updated_at.desc()).all()
 
@@ -21,8 +35,10 @@ def get_inventory(db: Session, inventory_id: UUID) -> Inventory:
 
 def create_inventory(db: Session, inventory_in: InventoryCreate) -> Inventory:
     now = datetime.utcnow()
+    payload = inventory_in.model_dump()
+    payload["tags"] = _normalize_tags(payload.get("tags"))
     inv = Inventory(
-        **inventory_in.model_dump(),
+        **payload,
         created_at=now,
         updated_at=now,
     )
@@ -32,9 +48,13 @@ def create_inventory(db: Session, inventory_in: InventoryCreate) -> Inventory:
     return inv
 
 
-def update_inventory(db: Session, inventory_id: UUID, inventory_in: InventoryUpdate) -> Inventory:
+def update_inventory(
+    db: Session, inventory_id: UUID, inventory_in: InventoryUpdate
+) -> Inventory:
     inv = get_inventory(db, inventory_id)
     data = inventory_in.model_dump(exclude_unset=True)
+    if "tags" in data:
+        data["tags"] = _normalize_tags(data.get("tags"))
     for k, v in data.items():
         setattr(inv, k, v)
     inv.updated_at = datetime.utcnow()

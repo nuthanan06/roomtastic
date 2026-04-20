@@ -15,8 +15,7 @@ def room_to_out(room: Room) -> RoomOut:
         height=room.height,
         last_edited=room.last_edited,
         furniture=[f.furniture_id for f in room.furniture],
-        windows=[w.window_id for w in room.windows],
-        doors=[d.door_id for d in room.doors],
+        openings=[o.opening_id for o in room.openings],
     )
 
 

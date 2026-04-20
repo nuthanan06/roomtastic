@@ -6,13 +6,10 @@ opencv-python==4.7.0.72
 pillow==10.0.0
 requests==2.31.0
 
-tripo3d
 aiohttp
 fastapi
 uvicorn[standard]
 python-multipart
-selenium
-webdriver-manager
 
 # Room/Inventory CRUD API
 SQLAlchemy>=2.0
@@ -20,4 +17,8 @@ python-dotenv
 psycopg[binary]
 email-validator
 python-jose[cryptography]
-passlib[bcrypt]
+bcrypt>=4.0.1
+
+# Dev tooling
+black==24.10.0
+alembic>=1.13

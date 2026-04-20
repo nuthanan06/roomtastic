@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Roomtastic Frontend
 
-## Getting Started
+Next.js App Router frontend for Roomtastic.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router)
+- React 19 + TypeScript
+- TanStack Query (server-state fetching/caching)
+- Tailwind CSS v4
+- Three.js + React Three Fiber + Drei
+
+## Run
 
 ```bash
+cd frontend
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Build check:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Frontend Structure
 
-## Learn More
+```text
+frontend/
+  app/                                # Routes (App Router)
+    page.tsx                          # Landing
+    login/                            # Auth login page
+    register/                         # Auth register page
+    rooms/                            # Room list/detail/edit routes
+    query-provider.tsx                # App-level TanStack Query provider
+  components/
+    features/
+      home/                           # Landing feature components
+      room-editor/                    # 3D editor scene + domain modules
+  hooks/                              # Query + feature hooks (TanStack Query wrappers)
+  services/                           # API domain services (rooms/auth/etc.)
+  lib/                                # Core clients/helpers (apiClient, auth, low-level utils)
+  types/                              # Shared API/domain TypeScript types
+  utils/                              # Generic cross-feature helpers
+  public/                             # Static assets
+  types/*.d.ts                        # Global type declarations
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Component Organization Rules
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Put feature-specific components in `components/features/<feature-name>/`.
+2. Keep route files in `app/` thin.
+3. Put request orchestration in `hooks/` and `services/`.
+4. Keep low-level clients/auth helpers in `lib/`.
+5. Keep shared response/request types in `types/api.ts`.
+6. Keep room editor domain modules under `components/features/room-editor/`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Data Fetching
 
-## Deploy on Vercel
+- Use TanStack Query for page-level server state (`useQuery`, `useMutation`, `useQueries`).
+- Keep `apiFetch` in `lib/apiClient.ts` as the shared HTTP transport.
+- Put endpoint wrappers in `services/*` and hook wrappers in `hooks/*`.
+- Use query keys scoped by entity, for example: `rooms`, `room`, `room-furniture`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## API Integration Notes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Use `lib/apiClient.ts` for HTTP client setup.
+- Keep route-specific payload/response types in `types/api.ts`.
+- Avoid hardcoding backend URLs in components; prefer env-driven clients.
+
+## Conventions
+
+- Use absolute imports via `@/`.
+- Keep files focused and feature-local.
+- Prefer composition over deeply nested prop drilling.
+- Add reusable UI only after a second real use case.

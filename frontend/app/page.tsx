@@ -1,5 +1,5 @@
-import Scene3D from "@/components/Scene3D";
+import LandingHome from "@/components/features/home/LandingHome";
 
 export default function Home() {
-  return <Scene3D />;
+  return <LandingHome />;
 }

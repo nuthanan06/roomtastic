@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
-import uuid
 from datetime import datetime
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -14,10 +12,7 @@ if BACKEND not in sys.path:
 
 from sqlalchemy import select
 
-from app.models.furniture import Furniture
-from app.models.inventory import Inventory
 from app.models.job import Job, JobStatus
-from app.models.room import Room
 from app.db.session import session_scope
 from app.db.init_db import init_db
 
@@ -28,24 +23,18 @@ def _now() -> datetime:
     return datetime.utcnow()
 
 
-def _room_uuid(room_id) -> uuid.UUID | None:
-    if room_id is None:
-        return None
-    if isinstance(room_id, uuid.UUID):
-        return room_id
-    try:
-        return uuid.UUID(str(room_id))
-    except (ValueError, TypeError):
-        return None
-
-
 def _claim_next_job():
+    """Claim the next pending job using FOR UPDATE SKIP LOCKED for concurrency safety.
+
+    FOR UPDATE SKIP LOCKED ensures only one worker claims each job, preventing race conditions.
+    """
     with session_scope() as s:
         j = (
             s.execute(
                 select(Job)
                 .where(Job.status == JobStatus.pending)
                 .order_by(Job.created_at.asc())
+                .with_for_update(skip_locked=True)
                 .limit(1)
             )
             .scalars()
@@ -76,114 +65,22 @@ def _finish_job(job_id, *, status: JobStatus, result=None, error: str | None = N
         s.add(j)
 
 
-def _handle_layout_generate(job_id, payload: dict):
-    room_id = _room_uuid(payload.get("room_id"))
-    if not room_id:
-        raise RuntimeError("invalid room_id")
+def _handle_hunyuan_generate(job_id, payload: dict):
+    image_url = str(payload.get("image_url") or "").strip()
+    if not image_url:
+        raise RuntimeError("image_url is required")
 
-    with session_scope() as s:
-        r = s.get(Room, room_id)
-        if not r:
-            raise RuntimeError("room not found")
+    quality = str(payload.get("quality") or "standard")
+    include_texture = bool(payload.get("include_texture", True))
 
-        existing = (
-            s.execute(select(Furniture).where(Furniture.room_id == room_id)).scalars().all()
-        )
-        if existing:
-            return {"message": "Room already has furniture; no-op placeholder", "suggestions": []}
-
-        inv = s.execute(select(Inventory).order_by(Inventory.updated_at.desc()).limit(3)).scalars().all()
-        suggestions = []
-        for idx, item in enumerate(inv):
-            suggestions.append(
-                {
-                    "inventory_id": str(item.inventory_id),
-                    "name": item.name,
-                    "coordinates": {"x": idx * 1.5, "y": 0, "z": 0},
-                    "rotation": 0,
-                }
-            )
-        return {"message": "Generated placeholder layout", "suggestions": suggestions}
-
-
-def _handle_layout_optimize(job_id, payload: dict):
-    room_id = _room_uuid(payload.get("room_id"))
-    if not room_id:
-        raise RuntimeError("invalid room_id")
-
-    with session_scope() as s:
-        r = s.get(Room, room_id)
-        if not r:
-            raise RuntimeError("room not found")
-
-        items = s.execute(select(Furniture).where(Furniture.room_id == room_id)).scalars().all()
-        for idx, f in enumerate(items):
-            try:
-                coords = json.loads(f.coordinates or "{}")
-            except (json.JSONDecodeError, TypeError):
-                coords = {}
-            if not isinstance(coords, dict):
-                coords = {}
-            coords["x"] = float(coords.get("x", 0)) + idx * 0.25
-            f.coordinates = json.dumps(coords)
-            f.updated_at = _now()
-            s.add(f)
-        r.last_edited = _now()
-        s.add(r)
-        return {"message": "Optimized placeholder layout", "moved": len(items)}
-
-
-def _handle_furniture_suggestions(job_id, payload: dict):
-    with session_scope() as s:
-        inv = s.execute(select(Inventory).order_by(Inventory.updated_at.desc()).limit(10)).scalars().all()
-        return {
-            "message": "Placeholder suggestions",
-            "items": [
-                {
-                    "inventory_id": str(i.inventory_id),
-                    "name": i.name,
-                    "category": i.category,
-                    "price": i.price,
-                    "thumbnail_url": i.thumbnail_url,
-                    "url_link": i.url_link,
-                }
-                for i in inv
-            ],
-        }
-
-
-def _handle_room_chat(job_id, payload: dict):
-    room_id = _room_uuid(payload.get("room_id"))
-    message = str(payload.get("message") or "")
-    response = f"Placeholder assistant: I received '{message}'."
-
-    lower = message.lower()
-    colors = ["white", "black", "gray", "grey", "blue", "red", "green", "beige", "cream", "brown", "yellow"]
-    chosen = None
-    for c in colors:
-        if c in lower and "wall" in lower:
-            chosen = c
-            break
-
-    updated_room = False
-    if chosen and room_id:
-        with session_scope() as s:
-            r = s.get(Room, room_id)
-            if r:
-                r.wall_colour = chosen
-                r.last_edited = _now()
-                s.add(r)
-                updated_room = True
-                response = f"Updated wall_colour to '{chosen}'."
-
-    return {"message": response, "updated_room": updated_room}
+    raise RuntimeError(
+        "hunyuan.generate is not implemented yet. Implement RunPod submission/polling before enabling this job. "
+        f"Received image_url={image_url!r}, quality={quality!r}, include_texture={include_texture!r}"
+    )
 
 
 HANDLERS = {
-    "layout.generate": _handle_layout_generate,
-    "layout.optimize": _handle_layout_optimize,
-    "furniture.suggestions": _handle_furniture_suggestions,
-    "room.chat": _handle_room_chat,
+    "hunyuan.generate": _handle_hunyuan_generate,
 }
 
 

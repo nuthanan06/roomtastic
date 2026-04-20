@@ -1,5 +1,5 @@
-declare module 'three/examples/jsm/loaders/GLTFLoader' {
-  import { Loader, LoadingManager, Group } from 'three';
+declare module "three/examples/jsm/loaders/GLTFLoader" {
+  import { Loader, LoadingManager, Group } from "three";
 
   export interface GLTF {
     scene: Group;
@@ -10,9 +10,19 @@ declare module 'three/examples/jsm/loaders/GLTFLoader' {
 
   export class GLTFLoader extends Loader {
     constructor(manager?: LoadingManager);
-    load(url: string, onLoad: (gltf: GLTF) => void, onProgress?: (event: ProgressEvent<EventTarget>) => void, onError?: (event: ErrorEvent) => void): void;
+    load(
+      url: string,
+      onLoad: (gltf: GLTF) => void,
+      onProgress?: (event: ProgressEvent<EventTarget>) => void,
+      onError?: (event: ErrorEvent) => void,
+    ): void;
     loadAsync(url: string): Promise<GLTF>;
-    parse(data: ArrayBuffer | string, path: string, onLoad: (gltf: GLTF) => void, onError?: (event: ErrorEvent) => void): void;
+    parse(
+      data: ArrayBuffer | string,
+      path: string,
+      onLoad: (gltf: GLTF) => void,
+      onError?: (event: ErrorEvent) => void,
+    ): void;
   }
 
   export default GLTFLoader;

@@ -1,7 +1,8 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
+
 
 class FurnitureBase(BaseModel):
     name_of_furniture: Optional[str] = None
@@ -10,12 +11,16 @@ class FurnitureBase(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     inventory_id: Optional[UUID] = None
+    tags: list[str] = Field(default_factory=list)
+
 
 class FurnitureCreate(FurnitureBase):
     pass
 
+
 class FurnitureUpdate(FurnitureBase):
     pass
+
 
 class FurnitureOut(FurnitureBase):
     model_config = ConfigDict(from_attributes=True)

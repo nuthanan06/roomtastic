@@ -23,10 +23,7 @@ class JobOut(BaseModel):
     updated_at: datetime
 
 
-class RoomChatBody(BaseModel):
-    message: str
-
-
-class RoomChatPutBody(BaseModel):
-    room_id: UUID
-    message: str
+class HunyuanGenerateBody(BaseModel):
+    image_url: str
+    quality: Optional[str] = "standard"
+    include_texture: bool = True

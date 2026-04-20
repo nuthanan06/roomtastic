@@ -6,16 +6,28 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import AuthLogin, AuthRegister, AuthToken, AuthMe
-from app.schemas.user import UserCreate, UserOut
+from app.schemas.auth import AuthLogin, AuthLoginResponse, AuthMe, AuthRegister
+from app.schemas.user import UserCreate
 from app.core.security import verify_password, issue_token
 from app.controllers import user_controller as user_ctrl
-from app.api.serialize import user_to_out
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=UserOut)
+def _session_for_user(user: User) -> AuthLoginResponse:
+    token = issue_token(user_id=user.user_id)
+    return AuthLoginResponse(
+        access_token=token,
+        user=AuthMe(
+            user_id=str(user.user_id),
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+        ),
+    )
+
+
+@router.post("/register", response_model=AuthLoginResponse)
 def register(body: AuthRegister, db: Session = Depends(get_db)):
     uc = UserCreate(
         first_name=body.first_name,
@@ -24,19 +36,19 @@ def register(body: AuthRegister, db: Session = Depends(get_db)):
         password=body.password,
     )
     user = user_ctrl.create_user(db, uc)
-    return user_to_out(user)
+    return _session_for_user(user)
 
 
-@router.post("/login", response_model=AuthToken)
+@router.post("/login", response_model=AuthLoginResponse)
 def login(body: AuthLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == body.email).first()
     if not user or not verify_password(body.password, user.password_hash or ""):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    user.last_loged_in = datetime.utcnow()
+    user.last_logged_in = datetime.utcnow()
     db.add(user)
     db.commit()
-    token = issue_token(user_id=user.user_id)
-    return AuthToken(access_token=token)
+    db.refresh(user)
+    return _session_for_user(user)
 
 
 @router.get("/me", response_model=AuthMe)

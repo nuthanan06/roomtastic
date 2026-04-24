@@ -3,6 +3,8 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
+from app.schemas.hunyuan import HunyuanGenerateOptions
+
 
 class InventoryBase(BaseModel):
     name: str
@@ -22,7 +24,8 @@ class InventoryBase(BaseModel):
 
 
 class InventoryCreate(InventoryBase):
-    pass
+    name: Optional[str] = None
+    hunyuan: Optional[HunyuanGenerateOptions] = None
 
 
 class InventoryUpdate(InventoryBase):

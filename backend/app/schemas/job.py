@@ -2,9 +2,10 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.job import JobStatus
+from app.schemas.hunyuan import HunyuanGenerateOptions
 
 
 class JobOut(BaseModel):
@@ -23,7 +24,11 @@ class JobOut(BaseModel):
     updated_at: datetime
 
 
-class HunyuanGenerateBody(BaseModel):
-    image_url: str
-    quality: Optional[str] = "standard"
-    include_texture: bool = True
+class HunyuanGenerateBody(HunyuanGenerateOptions):
+    inventory_name: Optional[str] = None
+    inventory_category: Optional[str] = None
+    inventory_description: Optional[str] = None
+    width: Optional[int] = None
+    length: Optional[int] = None
+    height: Optional[int] = None
+    tags: list[str] = Field(default_factory=list)

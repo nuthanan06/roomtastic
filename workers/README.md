@@ -18,8 +18,21 @@ Environment variables:
 
 Current job scope:
 
-1. **`hunyuan.generate`** job type is recognized by the worker.
-2. Execution intentionally fails with a clear "not implemented" error until RunPod/Hunyuan integration is added.
+1. **`hunyuan.generate`** submits a RunPod job, polls until terminal status, writes the returned GLB to `backend/glb_models`, and creates an `inventory` row with `model_url`.
+2. If `room_id` is provided in payload, the worker also creates a linked `furniture` row in that room.
+
+Required environment variables for Hunyuan generation:
+
+- `RUNPOD_ENDPOINT_ID`
+- `RUNPOD_API_KEY`
+
+Optional environment variables:
+
+- `RUNPOD_API_BASE` (default `https://api.runpod.ai`)
+- `RUNPOD_STATUS_POLL_SECONDS` (default `10`)
+- `RUNPOD_MAX_WAIT_SECONDS` (default `1800`)
+- `RUNPOD_HTTP_TIMEOUT_SECONDS` (default `120`)
+- `HUNYUAN_OUTPUT_DIR` (default `<repo>/backend/glb_models`; relative paths are resolved from the repo root)
+- `PUBLIC_BACKEND_URL` (default `http://localhost:8000`)
 
 Web scraping and other placeholder AI/layout job types are not part of the active worker scope.
-

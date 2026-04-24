@@ -10,7 +10,7 @@ https://www.figma.com/design/NJU5xCb5fPaGaTzim6RJBY/roomtastic-planning?node-id=
 
 ## Current Scope
 
-- Hunyuan generation is represented as a queued job type (`hunyuan.generate`) but worker execution is intentionally not implemented yet.
+- Hunyuan generation runs through queued jobs (`hunyuan.generate`) and the worker submits/polls RunPod jobs, then persists generated GLBs.
 - Legacy depth/scraping flows were removed from active API behavior.
 
 ## Tech Stack
@@ -35,7 +35,7 @@ postgresql
 
 workers/worker.py
   -> claims pending jobs with FOR UPDATE SKIP LOCKED
-  -> currently supports only hunyuan.generate (fails explicitly until implemented)
+  -> handles hunyuan.generate by submitting/polling RunPod and persisting generated records
 ```
 
 ## Repository Layout

@@ -10,6 +10,22 @@ export type AuthSessionResponse = {
   user: AuthUser;
 };
 
+export type JobStatus = "pending" | "running" | "succeeded" | "failed";
+
+export type JobOut = {
+  job_id: string;
+  type: string;
+  status: JobStatus;
+  payload: Record<string, unknown>;
+  result?: Record<string, unknown> | null;
+  error?: string | null;
+  attempts: number;
+  created_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  updated_at: string;
+};
+
 /** Mirrors backend RoomOut / FurnitureOut / InventoryOut (snake_case JSON). */
 export type RoomOut = {
   room_id: string;
@@ -115,4 +131,24 @@ export type CreateRoomInput = {
   height: number;
   wall_colour: string;
   is_natural_light: boolean;
+};
+
+export type HunyuanGenerateJobInput = {
+  image_base64?: string | null;
+  image_url?: string | null;
+  inventory_name?: string | null;
+  inventory_category?: string | null;
+  inventory_description?: string | null;
+  width?: number | null;
+  length?: number | null;
+  height?: number | null;
+  tags?: string[];
+  quality?: string;
+  include_texture?: boolean;
+  num_inference_steps?: number;
+  octree_resolution?: number;
+  seed?: number | null;
+  guidance_scale?: number;
+  num_chunks?: number;
+  face_count?: number;
 };

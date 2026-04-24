@@ -3,7 +3,9 @@ import { ensureArray } from "@/lib/utils";
 import type {
   CreateRoomInput,
   FurnitureOut,
+  HunyuanGenerateJobInput,
   InventoryOut,
+  JobOut,
   OpeningOut,
   RoomLayoutSyncBody,
   RoomLayoutSyncOut,
@@ -42,6 +44,21 @@ export function fetchInventory(token: string): Promise<InventoryOut[]> {
   return apiFetch<InventoryOut[]>("/inventory", { token }).then((rows) =>
     ensureArray<InventoryOut>(rows),
   );
+}
+
+export function createHunyuanGenerateJob(
+  token: string,
+  body: HunyuanGenerateJobInput,
+): Promise<JobOut> {
+  return apiFetch<JobOut>("/jobs/hunyuan/generate", {
+    method: "POST",
+    token,
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchJob(jobId: string, token: string): Promise<JobOut> {
+  return apiFetch<JobOut>(`/jobs/${jobId}`, { token });
 }
 
 export function createRoom(token: string, body: CreateRoomInput): Promise<RoomOut> {

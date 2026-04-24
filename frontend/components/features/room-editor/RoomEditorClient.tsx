@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { MOCK_CATALOG } from "@/lib/mockCatalog";
 import { CM_TO_M } from "@/lib/gridSnap";
 import { canonicalModelUrlForLoader, isRecognizedModelUrl } from "@/lib/modelUrl";
 import { publicAssetUrl } from "@/lib/publicAssetUrl";
 import { queryKeys, useInventoryQuery } from "@/hooks/useRoomQueries";
-import { syncRoomLayout } from "@/services/rooms";
-import type { FurnitureOut, InventoryOut, RoomOut } from "@/types/api";
+import { createHunyuanGenerateJob, fetchJob, syncRoomLayout } from "@/services/rooms";
+import type { FurnitureOut, InventoryOut, JobOut, RoomOut } from "@/types/api";
 import { getErrorMessage } from "@/utils/errors";
 import { runAssistantMessage } from "./assistantCommands";
 import type { FloorDropBridge } from "./floorDropBridge";
@@ -58,6 +58,28 @@ function cssColorToHex(input: string): string {
 }
 
 type SidebarTab = "catalog" | "room" | "assistant";
+type GenerationStatus = "idle" | "submitting" | "running" | "succeeded" | "failed";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function fileToBase64Data(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read the selected file."));
+    reader.onload = () => {
+      const raw = String(reader.result ?? "");
+      const payload = raw.includes(",") ? raw.split(",", 2)[1] : raw;
+      if (!payload) {
+        reject(new Error("Could not parse image data."));
+        return;
+      }
+      resolve(payload);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 /**
  * Finds the matching mock catalog item for a given GLB URL.
@@ -289,12 +311,40 @@ export default function RoomEditorClient({
   const inventory = useMemo(() => inventoryQuery.data ?? [], [inventoryQuery.data]);
   const inventoryLoading = inventoryQuery.isLoading && inventory.length === 0;
   const inventoryError = inventoryQuery.error ? getErrorMessage(inventoryQuery.error) : null;
+  const [sessionUploadInventoryIds, setSessionUploadInventoryIds] = useState<string[]>([]);
 
   const invById = useMemo(() => {
     const m = new Map<string, InventoryOut>();
     inventory.forEach((i) => m.set(i.inventory_id, i));
     return m;
   }, [inventory]);
+
+  const sessionUploadSet = useMemo(
+    () => new Set(sessionUploadInventoryIds),
+    [sessionUploadInventoryIds],
+  );
+
+  const orderedInventory = useMemo(() => {
+    const list = [...inventory];
+    list.sort((a, b) => {
+      const aUpload = sessionUploadSet.has(a.inventory_id) ? 1 : 0;
+      const bUpload = sessionUploadSet.has(b.inventory_id) ? 1 : 0;
+      if (aUpload !== bUpload) return bUpload - aUpload;
+
+      const aTs = Date.parse(a.updated_at ?? a.created_at ?? "");
+      const bTs = Date.parse(b.updated_at ?? b.created_at ?? "");
+      return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+    });
+    return list;
+  }, [inventory, sessionUploadSet]);
+
+  const sessionUploads = useMemo(
+    () =>
+      sessionUploadInventoryIds
+        .map((id) => invById.get(id))
+        .filter((row): row is InventoryOut => !!row),
+    [invById, sessionUploadInventoryIds],
+  );
 
   const [placements, setPlacements] = useState<Placement[]>(() =>
     initialFurniture.map((f) => furnitureToPlacement(f, invById)),
@@ -328,12 +378,33 @@ export default function RoomEditorClient({
   const sceneActionsRef = useRef<RoomEditorSceneActions | null>(null);
   const hudWorldRef = useRef<HTMLSpanElement | null>(null);
   const hudPxRef = useRef<HTMLSpanElement | null>(null);
+  const [sceneReady, setSceneReady] = useState(false);
   const [openings, setOpenings] = useState<RoomOpening[]>(initialOpenings);
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  const [generateName, setGenerateName] = useState("Generated Item");
+  const [generateCategory, setGenerateCategory] = useState("custom");
+  const [generateDescription, setGenerateDescription] = useState("");
+  const [generateIncludeTexture, setGenerateIncludeTexture] = useState(true);
+  const [generateImageFile, setGenerateImageFile] = useState<File | null>(null);
+  const [generateImagePreviewUrl, setGenerateImagePreviewUrl] = useState<string | null>(null);
+  const [generationStatus, setGenerationStatus] = useState<GenerationStatus>("idle");
+  const [generationJobId, setGenerationJobId] = useState<string | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
 
   const placementsRef = useRef<Placement[]>(placements);
   placementsRef.current = placements;
   const openingsRef = useRef<RoomOpening[]>(openings);
   openingsRef.current = openings;
+
+  useEffect(() => {
+    return () => {
+      if (generateImagePreviewUrl) URL.revokeObjectURL(generateImagePreviewUrl);
+    };
+  }, [generateImagePreviewUrl]);
+
+  useEffect(() => {
+    setSceneReady(true);
+  }, []);
 
   // Inventory rows can load after editor mount; hydrate model URLs for inventory-backed pieces.
   useEffect(() => {
@@ -510,6 +581,77 @@ export default function RoomEditorClient({
     },
   });
 
+  const submitGenerationMutation = useMutation({
+    mutationFn: async () => {
+      if (!generateImageFile) {
+        throw new Error("Please choose an image first.");
+      }
+
+      setGenerationError(null);
+      setGenerationStatus("submitting");
+      setGenerationJobId(null);
+
+      const imageBase64 = await fileToBase64Data(generateImageFile);
+      const createRes = await createHunyuanGenerateJob(token, {
+        image_base64: imageBase64,
+        inventory_name: generateName.trim() || "Generated Item",
+        inventory_category: generateCategory.trim() || "custom",
+        inventory_description: generateDescription.trim() || null,
+        include_texture: generateIncludeTexture,
+        tags: ["upload", "hunyuan"],
+      });
+
+      setGenerationJobId(createRes.job_id);
+      setGenerationStatus(
+        createRes.status === "failed"
+          ? "failed"
+          : createRes.status === "succeeded"
+            ? "succeeded"
+            : "running",
+      );
+
+      let latest: JobOut = createRes;
+      const deadline = Date.now() + 1000 * 60 * 25;
+      while (latest.status === "pending" || latest.status === "running") {
+        if (Date.now() > deadline) {
+          throw new Error("Generation timed out. Please try again.");
+        }
+        await sleep(2500);
+        latest = await fetchJob(createRes.job_id, token);
+        setGenerationStatus(
+          latest.status === "failed"
+            ? "failed"
+            : latest.status === "succeeded"
+              ? "succeeded"
+              : "running",
+        );
+      }
+
+      if (latest.status !== "succeeded") {
+        throw new Error(latest.error || "Generation failed.");
+      }
+      return latest;
+    },
+    onSuccess: async (job) => {
+      const inventoryIdRaw = job.result?.inventory_id;
+      if (typeof inventoryIdRaw === "string" && inventoryIdRaw.length > 0) {
+        setSessionUploadInventoryIds((prev) => [
+          inventoryIdRaw,
+          ...prev.filter((id) => id !== inventoryIdRaw),
+        ]);
+      }
+      setGenerationStatus("succeeded");
+      setGenerationError(null);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory });
+      setIsGenerateModalOpen(false);
+      onPickGenerationImage(null);
+    },
+    onError: (err: unknown) => {
+      setGenerationStatus("failed");
+      setGenerationError(getErrorMessage(err));
+    },
+  });
+
   const persistLayoutToServer = useCallback(async () => {
     if (saveBusyRef.current) {
       saveQueuedRef.current = true;
@@ -570,6 +712,18 @@ export default function RoomEditorClient({
     setSelectedId(p.clientId);
   };
 
+  const onPickGenerationImage = (file: File | null) => {
+    if (generateImagePreviewUrl) {
+      URL.revokeObjectURL(generateImagePreviewUrl);
+    }
+    setGenerateImageFile(file);
+    if (!file) {
+      setGenerateImagePreviewUrl(null);
+      return;
+    }
+    setGenerateImagePreviewUrl(URL.createObjectURL(file));
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[radial-gradient(ellipse_100%_70%_at_50%_-15%,rgba(124,58,237,0.2),transparent_55%),radial-gradient(ellipse_70%_50%_at_100%_0%,rgba(99,102,241,0.14),transparent_50%),linear-gradient(165deg,#07050f_0%,#12102a_42%,#0b1224_100%)] text-slate-100 selection:bg-violet-500/25 selection:text-white">
       <aside className="flex w-80 shrink-0 flex-col border-r border-white/[0.06] bg-slate-950/50 shadow-[4px_0_32px_-12px_rgba(0,0,0,0.65)] ring-1 ring-white/[0.04] backdrop-blur-xl ring-inset">
@@ -625,6 +779,38 @@ export default function RoomEditorClient({
             <p className="text-xs text-indigo-300/80">
               Drag into the room or click to add at center.
             </p>
+            <div className="rounded-xl border border-violet-500/30 bg-violet-950/35 p-3">
+              <button
+                type="button"
+                onClick={() => setIsGenerateModalOpen(true)}
+                className="w-full rounded-lg border border-violet-300/30 bg-violet-600/90 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-500"
+              >
+                Generate 3D From Image
+              </button>
+              <p className="mt-2 text-[11px] leading-relaxed text-violet-200/90">
+                Creates a GLB and adds it to inventory. It will appear first once ready.
+              </p>
+              {generationStatus !== "idle" ? (
+                <div className="mt-2 rounded-md border border-white/10 bg-slate-950/45 px-2.5 py-2 text-[11px]">
+                  <p className="font-medium text-slate-100">
+                    Status:{" "}
+                    <span className="capitalize">
+                      {generationStatus === "running"
+                        ? "running"
+                        : generationStatus === "submitting"
+                          ? "submitting"
+                          : generationStatus}
+                    </span>
+                  </p>
+                  {generationJobId ? (
+                    <p className="mt-0.5 font-mono text-[10px] text-slate-400">Job {generationJobId}</p>
+                  ) : null}
+                  {generationError ? (
+                    <p className="mt-1 text-red-300/90">{generationError}</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
             <div>
               <h3 className="rt-editor-heading mb-2 text-violet-400/90">Mock GLBs</h3>
               <div className="space-y-2">
@@ -651,17 +837,51 @@ export default function RoomEditorClient({
                 ))}
               </div>
             </div>
+            {sessionUploads.length > 0 ? (
+              <div>
+                <h3 className="rt-editor-heading mb-2 text-emerald-400/90">Your uploads</h3>
+                <div className="space-y-2">
+                  {sessionUploads.map((item) => (
+                    <button
+                      key={item.inventory_id}
+                      type="button"
+                      draggable
+                      onDragStart={(e) => {
+                        const raw =
+                          item.model_url &&
+                          (item.model_url.endsWith(".glb") || item.model_url.endsWith(".gltf"))
+                            ? item.model_url
+                            : "/mock-models/table.glb";
+                        const url = publicAssetUrl(raw);
+                        e.dataTransfer.setData("modelUrl", url);
+                        e.dataTransfer.setData("text/plain", url);
+                        e.dataTransfer.setData("label", item.name);
+                        e.dataTransfer.setData("inventoryId", item.inventory_id);
+                        e.dataTransfer.effectAllowed = "copy";
+                        setCatalogDragging(true);
+                        setDragModelUrl(url);
+                      }}
+                      onClick={() => addInventoryClick(item)}
+                      className="w-full rounded-xl border border-emerald-500/35 bg-emerald-950/25 px-3 py-2 text-left transition hover:border-emerald-300/50"
+                    >
+                      <div className="text-sm font-medium text-white">{item.name}</div>
+                      <div className="text-xs text-slate-300">{item.category ?? "uploaded"}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div>
               <h3 className="rt-editor-heading mb-2 text-sky-400/90">Inventory</h3>
               {inventoryLoading ? (
                 <p className="text-xs text-slate-500">Loading inventory...</p>
               ) : inventoryError ? (
                 <p className="text-xs text-red-300/90">{inventoryError}</p>
-              ) : inventory.length === 0 ? (
+              ) : orderedInventory.length === 0 ? (
                 <p className="text-xs text-slate-500">No inventory rows yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {inventory.slice(0, 40).map((item) => (
+                  {orderedInventory.slice(0, 40).map((item) => (
                     <button
                       key={item.inventory_id}
                       type="button"
@@ -1014,30 +1234,32 @@ export default function RoomEditorClient({
           </div>
         )}
         <div className="relative min-h-0 flex-1">
-          <EditorScene
-            roomW={widthM}
-            roomL={lengthM}
-            roomH={heightM}
-            floorColorHex={floorColorHex}
-            wallColorHex={wallColorHex}
-            floorTexturePreset={floorTexturePreset}
-            wallTexturePreset={wallTexturePreset}
-            floorDropBridgeRef={floorDropBridgeRef}
-            sceneActionsRef={sceneActionsRef}
-            dragModelUrl={catalogDragging ? dragModelUrl : null}
-            dropHover={dropHover}
-            placements={placements}
-            setPlacements={setPlacements}
-            selectedId={selectedId}
-            setSelectedId={setSelectedId}
-            secondarySelectedId={secondarySelectedId}
-            setSecondarySelectedId={setSecondarySelectedId}
-            transformMode={mode}
-            onInterference={onEditorInterference}
-            openings={openings}
-            hudWorldRef={hudWorldRef}
-            hudPxRef={hudPxRef}
-          />
+          {sceneReady ? (
+            <EditorScene
+              roomW={widthM}
+              roomL={lengthM}
+              roomH={heightM}
+              floorColorHex={floorColorHex}
+              wallColorHex={wallColorHex}
+              floorTexturePreset={floorTexturePreset}
+              wallTexturePreset={wallTexturePreset}
+              floorDropBridgeRef={floorDropBridgeRef}
+              sceneActionsRef={sceneActionsRef}
+              dragModelUrl={catalogDragging ? dragModelUrl : null}
+              dropHover={dropHover}
+              placements={placements}
+              setPlacements={setPlacements}
+              selectedId={selectedId}
+              setSelectedId={setSelectedId}
+              secondarySelectedId={secondarySelectedId}
+              setSecondarySelectedId={setSecondarySelectedId}
+              transformMode={mode}
+              onInterference={onEditorInterference}
+              openings={openings}
+              hudWorldRef={hudWorldRef}
+              hudPxRef={hudPxRef}
+            />
+          ) : null}
           <div className="pointer-events-none absolute bottom-3 left-3 z-[100] max-w-[min(42vw,240px)] rounded-xl border border-white/[0.08] bg-slate-950/80 px-3 py-2 text-[10px] font-medium text-slate-300 shadow-xl ring-1 shadow-black/40 ring-white/[0.05] backdrop-blur-md">
             <span className="font-sans text-slate-500">World </span>
             <span ref={hudWorldRef} className="font-mono text-violet-200/95 tabular-nums">
@@ -1109,6 +1331,120 @@ export default function RoomEditorClient({
           />
         </div>
       </aside>
+
+      {isGenerateModalOpen ? (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-white/15 bg-slate-900/95 p-4 shadow-2xl ring-1 ring-white/10">
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-base font-semibold tracking-tight text-white">
+                  Generate 3D Upload
+                </h2>
+                <p className="mt-1 text-xs text-slate-300">
+                  Upload one image. We will run Hunyuan and add the result to inventory.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsGenerateModalOpen(false)}
+                className="rounded-md border border-white/10 px-2 py-1 text-xs text-slate-300 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="block text-xs text-slate-300">
+                Name
+                <input
+                  value={generateName}
+                  onChange={(e) => setGenerateName(e.target.value)}
+                  placeholder="Generated Item"
+                  className="mt-1 w-full rounded-lg border border-white/15 bg-slate-950/70 px-2.5 py-2 text-sm text-white placeholder:text-slate-500"
+                />
+              </label>
+
+              <label className="block text-xs text-slate-300">
+                Category
+                <input
+                  value={generateCategory}
+                  onChange={(e) => setGenerateCategory(e.target.value)}
+                  placeholder="custom"
+                  className="mt-1 w-full rounded-lg border border-white/15 bg-slate-950/70 px-2.5 py-2 text-sm text-white placeholder:text-slate-500"
+                />
+              </label>
+
+              <label className="block text-xs text-slate-300">
+                Description (optional)
+                <textarea
+                  value={generateDescription}
+                  onChange={(e) => setGenerateDescription(e.target.value)}
+                  rows={3}
+                  placeholder="What is this item?"
+                  className="mt-1 w-full rounded-lg border border-white/15 bg-slate-950/70 px-2.5 py-2 text-sm text-white placeholder:text-slate-500"
+                />
+              </label>
+
+              <label className="block text-xs text-slate-300">
+                Image
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => onPickGenerationImage(e.target.files?.[0] ?? null)}
+                  className="mt-1 block w-full cursor-pointer rounded-lg border border-white/15 bg-slate-950/70 px-2 py-2 text-xs text-slate-200 file:mr-2 file:rounded-md file:border-0 file:bg-violet-600 file:px-2 file:py-1 file:text-white hover:file:bg-violet-500"
+                />
+              </label>
+
+              {generateImagePreviewUrl ? (
+                <Image
+                  src={generateImagePreviewUrl}
+                  alt="Selected upload preview"
+                  width={640}
+                  height={320}
+                  unoptimized
+                  className="h-36 w-full rounded-lg border border-white/10 object-cover"
+                />
+              ) : null}
+
+              <label className="flex items-center gap-2 text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={generateIncludeTexture}
+                  onChange={(e) => setGenerateIncludeTexture(e.target.checked)}
+                  className="h-4 w-4 accent-violet-500"
+                />
+                Include texture generation
+              </label>
+
+              {generationError ? (
+                <p className="rounded-md border border-red-500/40 bg-red-950/35 px-2.5 py-2 text-xs text-red-200">
+                  {generationError}
+                </p>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsGenerateModalOpen(false)}
+                  className="rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-300 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={submitGenerationMutation.isPending}
+                  onClick={() => {
+                    void submitGenerationMutation.mutateAsync();
+                  }}
+                  className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 hover:bg-violet-500"
+                >
+                  {submitGenerationMutation.isPending ? "Generating..." : "Start Generation"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

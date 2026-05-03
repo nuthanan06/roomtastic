@@ -2,12 +2,6 @@
 
 AI-powered room design platform with a FastAPI backend, Next.js frontend, and a DB-backed worker queue.
 
-## Source Of Truth
-
-Planning artifacts (system design, milestones, architecture notes) live in Figma:
-
-https://www.figma.com/design/NJU5xCb5fPaGaTzim6RJBY/roomtastic-planning?node-id=0-1&p=f&t=GJyrJXiFjtv6f43q-0
-
 ## Current Scope
 
 - Hunyuan generation is represented as a queued job type (`hunyuan.generate`) but worker execution is intentionally not implemented yet.

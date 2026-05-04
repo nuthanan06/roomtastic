@@ -71,7 +71,7 @@ export function newPlacementFromCatalog(opts: {
 /** Resolves an inventory row to a loader-safe GLB URL, falling back to the default chair model. */
 export function inventoryToGlb(inv: { model_url?: string | null } | null | undefined): string {
   const u = inv?.model_url;
-  if (u && (u.endsWith(".glb") || u.endsWith(".gltf") || u.includes("/mock-models/"))) {
+  if (u && (u.endsWith(".glb") || u.endsWith(".gltf"))) {
     return u;
   }
   return FALLBACK_GLB;

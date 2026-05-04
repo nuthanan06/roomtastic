@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import RoomEditorClient from "@/components/features/room-editor/RoomEditorClient";
 import {
   openingOutToOpening,
   type RoomOpening,
 } from "@/components/features/room-editor/roomOpenings";
 import { useRoomEditorQueries } from "@/hooks/useRoomQueries";
-import { getToken } from "@/lib/auth";
+import { useClientToken } from "@/lib/auth";
 import { getErrorMessage } from "@/utils/errors";
 
 function LoadingEditor({ message, error }: { message: string; error: string | null }) {
@@ -34,23 +34,17 @@ export default function EditRoomPage() {
   const router = useRouter();
   const params = useParams<{ roomId: string }>();
   const roomId = params.roomId;
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const [sessionResolved, setSessionResolved] = useState(false);
+
+  const token = useClientToken();
 
   useEffect(() => {
-    const token = getToken();
-    setSessionToken(token);
-    setSessionResolved(true);
-    if (!token) {
-      router.replace("/login");
-    }
-  }, [router]);
+    if (!token) router.replace("/login");
+  }, [token, router]);
 
-  const { roomQuery, furnitureQuery, openingsQuery } = useRoomEditorQueries(roomId, sessionToken);
+  const { roomQuery, furnitureQuery, openingsQuery } = useRoomEditorQueries(roomId, token);
 
   const loading =
-    !!sessionToken &&
-    (roomQuery.isLoading || furnitureQuery.isLoading || openingsQuery.isLoading);
+    !!token && (roomQuery.isLoading || furnitureQuery.isLoading || openingsQuery.isLoading);
 
   const room = roomQuery.data ?? null;
   const furniture = furnitureQuery.data ?? [];
@@ -59,11 +53,7 @@ export default function EditRoomPage() {
   const error = roomQuery.error ?? furnitureQuery.error ?? openingsQuery.error;
   const errorMessage = error ? getErrorMessage(error) : null;
 
-  if (!sessionResolved) {
-    return <LoadingEditor message="Loading editor..." error={null} />;
-  }
-
-  if (!sessionToken) {
+  if (!token) {
     return <LoadingEditor message="Redirecting to login..." error={null} />;
   }
 
@@ -79,7 +69,7 @@ export default function EditRoomPage() {
   return (
     <RoomEditorClient
       roomId={roomId}
-      token={sessionToken}
+      token={token}
       room={room}
       initialFurniture={furniture}
       initialOpenings={openings}

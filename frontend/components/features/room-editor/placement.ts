@@ -20,9 +20,11 @@ export type Placement = {
 
 const FALLBACK_GLB = "/mock-models/chair.glb";
 
+// ─── Public entry points ────────────────────────────────────────────────────
+
 /**
- * Main hydration path from backend furniture rows -> in-editor placement model.
- * Keeps world transforms in meters/radians and resolves model URL via inventory fallback.
+ * Hydrates a backend FurnitureOut row into an in-editor Placement.
+ * Keeps world transforms in meters/radians and resolves the model URL via inventory.
  */
 export function furnitureToPlacement(
   f: FurnitureOut,
@@ -43,8 +45,8 @@ export function furnitureToPlacement(
 }
 
 /**
- * Main creation path for catalog drops.
- * Spawn as root placement; scene logic later resolves free X/Z and support Y.
+ * Creates a new root Placement for a catalog or inventory drop.
+ * Position is left at origin; scene logic resolves the free X/Z and support Y.
  */
 export function newPlacementFromCatalog(opts: {
   glbUrl: string;
@@ -64,13 +66,12 @@ export function newPlacementFromCatalog(opts: {
   };
 }
 
-/** Resolves a backend inventory row to a loader-safe GLB URL with fallback. */
+// ─── Support utility ────────────────────────────────────────────────────────
+
+/** Resolves an inventory row to a loader-safe GLB URL, falling back to the default chair model. */
 export function inventoryToGlb(inv: { model_url?: string | null } | null | undefined): string {
   const u = inv?.model_url;
-  if (
-    u &&
-    (u.endsWith(".glb") || u.endsWith(".gltf") || u.includes("/mock-models/"))
-  ) {
+  if (u && (u.endsWith(".glb") || u.endsWith(".gltf") || u.includes("/mock-models/"))) {
     return u;
   }
   return FALLBACK_GLB;

@@ -11,20 +11,6 @@ export function canonicalModelUrlForLoader(raw: string): string {
   return s;
 }
 
-function isMockModelPathname(pathname: string): boolean {
-  return /^\/mock-models\/[a-z0-9_-]+\.glb$/i.test(pathname);
-}
-
 export function isRecognizedModelUrl(raw: string): boolean {
-  const s = raw.trim();
-  if (/\.(glb|gltf)(\?|$)/i.test(s)) return true;
-  try {
-    const pathname = new URL(
-      s,
-      typeof window !== "undefined" ? window.location.origin : "http://localhost",
-    ).pathname;
-    return isMockModelPathname(pathname);
-  } catch {
-    return isMockModelPathname(s);
-  }
+  return /\.(glb|gltf)(\?|$)/i.test(raw.trim());
 }

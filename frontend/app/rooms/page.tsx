@@ -3,15 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { clearAuth, getStoredUser, getToken, type StoredUser } from "@/lib/auth";
+import { clearAuth, useClientToken, useClientUser } from "@/lib/auth";
 import { useCreateRoomMutation, useUserRoomsQuery } from "@/hooks/useRoomQueries";
 import { getErrorMessage } from "@/utils/errors";
 import type { CreateRoomInput } from "@/types/api";
-
-type RoomsAuthState = {
-  token: string;
-  user: StoredUser;
-};
 
 const DEFAULT_ROOM_PAYLOAD = {
   width: 400,
@@ -24,21 +19,14 @@ const DEFAULT_ROOM_PAYLOAD = {
 export default function RoomsPage() {
   const router = useRouter();
   const [createError, setCreateError] = useState<string | null>(null);
-  const [auth, setAuth] = useState<RoomsAuthState | null>(null);
-  const [authResolved, setAuthResolved] = useState(false);
+
+  const token = useClientToken();
+  const user = useClientUser();
+  const auth = token && user ? { token, user } : null;
 
   useEffect(() => {
-    const token = getToken();
-    const user = getStoredUser();
-    if (!token || !user) {
-      setAuth(null);
-      setAuthResolved(true);
-      router.push("/login");
-      return;
-    }
-    setAuth({ token, user });
-    setAuthResolved(true);
-  }, [router]);
+    if (!auth) router.push("/login");
+  }, [auth, router]);
 
   const session = useMemo(
     () => (auth ? { token: auth.token, userId: auth.user.user_id } : null),
@@ -53,12 +41,15 @@ export default function RoomsPage() {
   });
 
   const loading = !!auth && roomsQuery.isLoading;
-
   const rooms = roomsQuery.data ?? [];
   const error = createError ?? (roomsQuery.error ? getErrorMessage(roomsQuery.error) : null);
 
-  if (!authResolved) {
-    return <div className="rt-app-shell min-h-screen p-6 text-sm text-indigo-200">Loading...</div>;
+  if (!auth) {
+    return (
+      <div className="rt-app-shell min-h-screen p-6 text-sm text-indigo-200">
+        Redirecting to login...
+      </div>
+    );
   }
 
   const handleCreateRoom = () => {
@@ -75,14 +66,6 @@ export default function RoomsPage() {
       onError: (e) => setCreateError(getErrorMessage(e)),
     });
   };
-
-  if (!auth) {
-    return (
-      <div className="rt-app-shell min-h-screen p-6 text-sm text-indigo-200">
-        Redirecting to login...
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-950 p-6 text-slate-100">

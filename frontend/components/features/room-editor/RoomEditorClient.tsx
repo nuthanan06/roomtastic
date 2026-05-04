@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MOCK_CATALOG } from "@/lib/mockCatalog";
 import { CM_TO_M } from "@/lib/gridSnap";
 import { canonicalModelUrlForLoader, isRecognizedModelUrl } from "@/lib/modelUrl";
 import { publicAssetUrl } from "@/lib/publicAssetUrl";
@@ -23,7 +22,6 @@ import {
 } from "./placement";
 import type { FloorTextureId, WallTextureId } from "./proceduralTextures";
 import { DEFAULT_DOOR, DEFAULT_WINDOW, type RoomOpening, type WallKey } from "./roomOpenings";
-import { useGLTF } from "@react-three/drei";
 
 /**
  * Generates a unique ID for a new door or window opening.
@@ -81,15 +79,6 @@ function fileToBase64Data(file: File): Promise<string> {
   });
 }
 
-/**
- * Finds the matching mock catalog item for a given GLB URL.
- * Normalizes URLs before comparison to handle path variations.
- */
-function mockCatalogMatchForUrl(glbUrl: string): (typeof MOCK_CATALOG)[number] | undefined {
-  const canon = canonicalModelUrlForLoader(glbUrl);
-  return MOCK_CATALOG.find((m) => canonicalModelUrlForLoader(publicAssetUrl(m.glbUrl)) === canon);
-}
-
 function InventoryListThumb({ item }: { item: InventoryOut }) {
   if (item.thumbnail_url) {
     return (
@@ -139,7 +128,6 @@ function SelectionDetailsPanel({
     );
   }
 
-  const mockMatch = mockCatalogMatchForUrl(placement.glbUrl);
   const rotDeg = Math.round((placement.rotationY * 180) / Math.PI);
   const [px, py, pz] = placement.position;
 
@@ -195,11 +183,6 @@ function SelectionDetailsPanel({
               </div>
             ) : null}
           </dl>
-        ) : mockMatch ? (
-          <p className="text-xs text-slate-300">
-            Mock catalog: <span className="text-violet-200">{mockMatch.label}</span>
-            <span className="ml-1 text-slate-500">({mockMatch.id})</span>
-          </p>
         ) : (
           <p className="text-xs text-slate-300">Custom model (not from current inventory row)</p>
         )}
@@ -306,7 +289,6 @@ function SelectionDetailsPanel({
  * - Sync selected/secondary selected furniture for grouping operations
  * - Render 3D scene (EditorScene) + left/right sidebars with catalog, room settings, assistant chat
  * - Auto-save layout every ~1.1s (debounced) with conflict resolution
- * - Preload mock GLB models for instant drag/drop feedback
  * - Bridge between HTML UI and 3D canvas via refs (FloorDropBridge, SceneActions)
  * - Support doors/windows preview (not yet persisted to backend)
  *
@@ -485,12 +467,6 @@ export default function RoomEditorClient({
   }, [invById, selectedPlacement]);
 
   useEffect(() => {
-    MOCK_CATALOG.forEach((m) => {
-      useGLTF.preload(publicAssetUrl(m.glbUrl));
-    });
-  }, []);
-
-  useEffect(() => {
     const end = () => {
       setCatalogDragging(false);
       setDropHover(null);
@@ -522,12 +498,6 @@ export default function RoomEditorClient({
     },
     [],
   );
-
-  const addMockClick = (glbUrlAbs: string, label: string) => {
-    const p = newPlacementFromCatalog({ glbUrl: glbUrlAbs, label, inventoryId: null, x: 0, z: 0 });
-    setPlacements((prev) => [...prev, p]);
-    setSelectedId(p.clientId);
-  };
 
   const saveLayoutMutation = useMutation({
     mutationFn: async () => {
@@ -729,12 +699,9 @@ export default function RoomEditorClient({
   }, [placements, openings, wallColorHex, persistLayoutToServer]);
 
   const addInventoryClick = (item: InventoryOut) => {
-    const raw =
-      item.model_url && (item.model_url.endsWith(".glb") || item.model_url.endsWith(".gltf"))
-        ? item.model_url
-        : "/mock-models/table.glb";
+    if (!item.model_url) return;
     const p = newPlacementFromCatalog({
-      glbUrl: publicAssetUrl(raw),
+      glbUrl: publicAssetUrl(item.model_url),
       label: item.name,
       inventoryId: item.inventory_id,
       x: 0,
@@ -844,32 +811,6 @@ export default function RoomEditorClient({
               ) : null}
             </div>
             <div>
-              <h3 className="rt-editor-heading mb-2 text-violet-400/90">Mock GLBs</h3>
-              <div className="space-y-2">
-                {MOCK_CATALOG.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    draggable
-                    onDragStart={(e) => {
-                      const url = publicAssetUrl(m.glbUrl);
-                      e.dataTransfer.setData("modelUrl", url);
-                      e.dataTransfer.setData("text/plain", url);
-                      e.dataTransfer.setData("label", m.label);
-                      e.dataTransfer.effectAllowed = "copy";
-                      setCatalogDragging(true);
-                      setDragModelUrl(url);
-                    }}
-                    onClick={() => addMockClick(publicAssetUrl(m.glbUrl), m.label)}
-                    className={`w-full rounded-xl border border-white/10 px-3 py-3 text-left ${m.accent} flex items-center gap-3 transition hover:border-violet-400/50 hover:bg-white/5`}
-                  >
-                    <span className="h-10 w-10 rounded-lg border border-violet-500/30 bg-slate-900/80" />
-                    <span className="text-sm font-medium text-white">{m.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
               <h3 className="rt-editor-heading mb-2 text-emerald-400/90">User Inventory</h3>
               {inventoryLoading ? (
                 <p className="text-xs text-slate-500">Loading inventory...</p>
@@ -885,12 +826,8 @@ export default function RoomEditorClient({
                       type="button"
                       draggable
                       onDragStart={(e) => {
-                        const raw =
-                          item.model_url &&
-                          (item.model_url.endsWith(".glb") || item.model_url.endsWith(".gltf"))
-                            ? item.model_url
-                            : "/mock-models/table.glb";
-                        const url = publicAssetUrl(raw);
+                        if (!item.model_url) return;
+                        const url = publicAssetUrl(item.model_url);
                         e.dataTransfer.setData("modelUrl", url);
                         e.dataTransfer.setData("text/plain", url);
                         e.dataTransfer.setData("label", item.name);
@@ -937,12 +874,8 @@ export default function RoomEditorClient({
                       type="button"
                       draggable
                       onDragStart={(e) => {
-                        const raw =
-                          item.model_url &&
-                          (item.model_url.endsWith(".glb") || item.model_url.endsWith(".gltf"))
-                            ? item.model_url
-                            : "/mock-models/table.glb";
-                        const url = publicAssetUrl(raw);
+                        if (!item.model_url) return;
+                        const url = publicAssetUrl(item.model_url);
                         e.dataTransfer.setData("modelUrl", url);
                         e.dataTransfer.setData("text/plain", url);
                         e.dataTransfer.setData("label", item.name);

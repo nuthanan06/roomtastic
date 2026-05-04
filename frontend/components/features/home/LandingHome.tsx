@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
-import { getToken } from "@/lib/auth";
+import { useClientToken } from "@/lib/auth";
 
 export default function LandingHome() {
-  const hasSession = useMemo(() => !!getToken(), []);
+  const hasSession = !!useClientToken();
 
   return (
     <div className="rt-app-shell min-h-screen">

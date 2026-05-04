@@ -21,7 +21,9 @@ export type TransformSnapshot = {
   scale: number;
 };
 
-/** Core transform snapshot API used by drag/rotate/scale rollback paths. */
+// ─── Drag / drop entry points ──────────────────────────────────────────────
+
+/** Saves current world transform; used by drag/rotate/scale rollback paths. */
 export function snapshotTransform(object: THREE.Object3D): TransformSnapshot {
   return {
     px: object.position.x,
@@ -40,7 +42,7 @@ export function applyTransformSnapshot(object: THREE.Object3D, s: TransformSnaps
 }
 
 /**
- * Main drag-hover helper.
+ * Main drag-hover helper: clamps the preview ghost to a valid grid-snapped position.
  * Room coordinates are centered at world origin, so valid X/Z are symmetric around 0.
  */
 export function clampDropHoverXZ(
@@ -62,7 +64,7 @@ export function clampDropHoverXZ(
 
 /**
  * Main free-cell search used when dropping from catalog.
- * Finds nearest snapped X/Z that fits in room bounds and does not overlap blocking geometry.
+ * Finds the nearest snapped X/Z that fits in room bounds and does not overlap blocking geometry.
  */
 export function findFreeDropXZ(
   x0: number,
@@ -114,8 +116,8 @@ export function findFreeDropXZ(
 }
 
 /**
- * Main transform guard.
- * Ensures object sits on/above floor, stays in room bounds, and does not overlap unrelated objects.
+ * Main transform guard: called during drag/rotate/scale to decide whether to accept or roll back.
+ * Ensures the object sits on/above the floor, stays in room bounds, and does not overlap unrelated objects.
  */
 export function placementTransformAllowed(
   self: THREE.Object3D,
@@ -133,8 +135,8 @@ export function placementTransformAllowed(
 }
 
 /**
- * Settles an object down onto its support surface.
- * Used after stack/attach operations to remove tiny air gaps.
+ * Settles an object down onto its support surface after stack/attach operations.
+ * Removes tiny air gaps without overshooting (> 0.45 m drop means something is wrong).
  */
 export function settleOntoSupportBelow(
   object: THREE.Object3D,
@@ -155,183 +157,10 @@ export function settleOntoSupportBelow(
   }
 }
 
-/** Recompute current world AABB after forcing fresh world matrices. */
-export function worldBox3(object: THREE.Object3D): THREE.Box3 {
-  object.updateMatrixWorld(true);
-  return new THREE.Box3().setFromObject(object);
-}
-
 /**
- * True only when overlap has interior volume.
- * If intersection thickness on any axis is <= 0, the boxes only touch, so this returns false.
+ * Iteratively clamps the world transform so the AABB stays inside the room and above the floor.
+ * Used by placementTransformAllowed and settleOntoSupportBelow.
  */
-export function aabbBlockingOverlap(a: THREE.Box3, b: THREE.Box3): boolean {
-  if (!a.intersectsBox(b)) return false;
-  const ix = Math.min(a.max.x, b.max.x) - Math.max(a.min.x, b.min.x);
-  const iy = Math.min(a.max.y, b.max.y) - Math.max(a.min.y, b.min.y);
-  const iz = Math.min(a.max.z, b.max.z) - Math.max(a.min.z, b.min.z);
-  if (ix <= 0 || iy <= 0 || iz <= 0) return false;
-
-  // One thin overlap axis means a face-touch (resting or adjacency), not a blocking collision.
-  if (iy <= CONTACT_EPS && ix > CONTACT_EPS && iz > CONTACT_EPS) return false;
-  if (ix <= CONTACT_EPS && iy > CONTACT_EPS && iz > CONTACT_EPS) return false;
-  if (iz <= CONTACT_EPS && iy > CONTACT_EPS && ix > CONTACT_EPS) return false;
-
-  return true;
-}
-
-/** Room is centered at origin; box must stay within [-half, +half] in X and Z. */
-export function boxInsideRoomXZ(box: THREE.Box3, roomHalfW: number, roomHalfL: number): boolean {
-  return (
-    box.min.x >= -roomHalfW - EPS &&
-    box.max.x <= roomHalfW + EPS &&
-    box.min.z >= -roomHalfL - EPS &&
-    box.max.z <= roomHalfL + EPS
-  );
-}
-
-/** Checks self against all other objects, skipping parent/child pairs. */
-export function placementOverlapsAnyOther(
-  self: THREE.Object3D,
-  selfId: string,
-  objectMap: Map<string, THREE.Object3D>,
-  placements: Placement[],
-): boolean {
-  const box = worldBox3(self);
-  for (const [id, other] of objectMap) {
-    if (id === selfId) continue;
-    if (skipCollisionPair(placements, selfId, id)) continue;
-    if (aabbBlockingOverlap(box, worldBox3(other))) return true;
-  }
-  return false;
-}
-
-/**
- * Highest support surface under a sample point.
- * Returns room floor (0) or the highest object top under that X/Z.
- */
-export function supportSurfaceYAt(
-  x: number,
-  z: number,
-  objectMap: Map<string, THREE.Object3D>,
-  excludeId?: string,
-  placements?: Placement[],
-): number {
-  let maxY = 0;
-  for (const [id, obj] of objectMap) {
-    if (id === excludeId) continue;
-    if (excludeId && placements && skipCollisionPair(placements, excludeId, id)) continue;
-    const box = worldBox3(obj);
-    if (x < box.min.x - EPS || x > box.max.x + EPS || z < box.min.z - EPS || z > box.max.z + EPS) {
-      continue;
-    }
-    maxY = Math.max(maxY, box.max.y);
-  }
-  return maxY;
-}
-
-/**
- * Highest support needed under an entire footprint.
- * Samples corners + center, then picks max so the full footprint can rest safely.
- */
-export function supportBaseUnderFootprint(
-  foot: THREE.Box3,
-  objectMap: Map<string, THREE.Object3D>,
-  excludeId: string,
-  placements: Placement[],
-): number {
-  const samples: Array<[number, number]> = [
-    [foot.min.x, foot.min.z],
-    [foot.max.x, foot.min.z],
-    [foot.min.x, foot.max.z],
-    [foot.max.x, foot.max.z],
-    [(foot.min.x + foot.max.x) / 2, (foot.min.z + foot.max.z) / 2],
-  ];
-  let base = 0;
-  for (const [sx, sz] of samples) {
-    base = Math.max(base, supportSurfaceYAt(sx, sz, objectMap, excludeId, placements));
-  }
-  return base;
-}
-
-/** Synthetic AABB on floor for quick fit checks before placing. */
-export function syntheticPlacementBox(
-  x: number,
-  z: number,
-  fp: ModelFootprint,
-  scale: number,
-): THREE.Box3 {
-  return syntheticPlacementBoxOnSurface(x, z, 0, fp, scale);
-}
-
-/** Synthetic AABB on an arbitrary support height (used for stacking checks). */
-export function syntheticPlacementBoxOnSurface(
-  x: number,
-  z: number,
-  baseY: number,
-  fp: ModelFootprint,
-  scale: number,
-): THREE.Box3 {
-  const sx = fp.hx * scale;
-  const sz = fp.hz * scale;
-  const top = fp.yTop * scale;
-  return new THREE.Box3(
-    new THREE.Vector3(x - sx, baseY, z - sz),
-    new THREE.Vector3(x + sx, baseY + top, z + sz),
-  );
-}
-
-/** Keep object center in room bounds and snap to grid. */
-function clampFootprintCenterToRoom(
-  x: number,
-  z: number,
-  fp: ModelFootprint,
-  scale: number,
-  roomHalfW: number,
-  roomHalfL: number,
-): { x: number; z: number } {
-  const sx = fp.hx * scale;
-  const sz = fp.hz * scale;
-  const minCx = -roomHalfW + sx;
-  const maxCx = roomHalfW - sx;
-  const minCz = -roomHalfL + sz;
-  const maxCz = roomHalfL - sz;
-  let cx = x;
-  let cz = z;
-
-  if (minCx <= maxCx) cx = Math.min(maxCx, Math.max(minCx, x));
-  else cx = 0;
-  if (minCz <= maxCz) cz = Math.min(maxCz, Math.max(minCz, z));
-  else cz = 0;
-
-  const [qx, qz] = snapXZ(cx, cz);
-  return { x: qx, z: qz };
-}
-
-/** If footprint is wider than room on one axis, lock that axis to center (0). */
-function scaleFootprintCenterIfDegenerate(
-  center: { x: number; z: number },
-  fp: ModelFootprint,
-  scale: number,
-  roomHalfW: number,
-  roomHalfL: number,
-): { x: number; z: number } {
-  const sx = fp.hx * scale;
-  const sz = fp.hz * scale;
-  let x = center.x;
-  let z = center.z;
-  if (sx > roomHalfW + EPS) x = 0;
-  if (sz > roomHalfL + EPS) z = 0;
-  const [qx, qz] = snapXZ(x, z);
-  return { x: qx, z: qz };
-}
-
-/** Skip collisions between parent and descendant since they are intentionally attached. */
-function skipCollisionPair(placements: Placement[], idA: string, idB: string): boolean {
-  return isAncestorOf(placements, idA, idB) || isAncestorOf(placements, idB, idA);
-}
-
-/** Clamp world transform so AABB stays in room and above floor. */
 export function clampObjectToFloorAndRoom(
   object: THREE.Object3D,
   roomHalfW: number,
@@ -364,4 +193,181 @@ export function clampObjectToFloorAndRoom(
     break;
   }
   object.updateMatrixWorld(true);
+}
+
+// ─── AABB / overlap utilities ───────────────────────────────────────────────
+
+/** Recomputes the current world AABB after forcing fresh world matrices. */
+export function worldBox3(object: THREE.Object3D): THREE.Box3 {
+  object.updateMatrixWorld(true);
+  return new THREE.Box3().setFromObject(object);
+}
+
+/**
+ * Returns true only when two boxes share interior volume (not just touching faces).
+ * Thin overlap on any axis is treated as face-contact (resting/adjacency), not a collision.
+ */
+export function aabbBlockingOverlap(a: THREE.Box3, b: THREE.Box3): boolean {
+  if (!a.intersectsBox(b)) return false;
+  const ix = Math.min(a.max.x, b.max.x) - Math.max(a.min.x, b.min.x);
+  const iy = Math.min(a.max.y, b.max.y) - Math.max(a.min.y, b.min.y);
+  const iz = Math.min(a.max.z, b.max.z) - Math.max(a.min.z, b.min.z);
+  if (ix <= 0 || iy <= 0 || iz <= 0) return false;
+  if (iy <= CONTACT_EPS && ix > CONTACT_EPS && iz > CONTACT_EPS) return false;
+  if (ix <= CONTACT_EPS && iy > CONTACT_EPS && iz > CONTACT_EPS) return false;
+  if (iz <= CONTACT_EPS && iy > CONTACT_EPS && ix > CONTACT_EPS) return false;
+  return true;
+}
+
+/** Returns true when a box is fully inside the room bounds in X and Z. */
+export function boxInsideRoomXZ(box: THREE.Box3, roomHalfW: number, roomHalfL: number): boolean {
+  return (
+    box.min.x >= -roomHalfW - EPS &&
+    box.max.x <= roomHalfW + EPS &&
+    box.min.z >= -roomHalfL - EPS &&
+    box.max.z <= roomHalfL + EPS
+  );
+}
+
+/** Checks self against every other object in the map, skipping parent/child pairs. */
+export function placementOverlapsAnyOther(
+  self: THREE.Object3D,
+  selfId: string,
+  objectMap: Map<string, THREE.Object3D>,
+  placements: Placement[],
+): boolean {
+  const box = worldBox3(self);
+  for (const [id, other] of objectMap) {
+    if (id === selfId) continue;
+    if (skipCollisionPair(placements, selfId, id)) continue;
+    if (aabbBlockingOverlap(box, worldBox3(other))) return true;
+  }
+  return false;
+}
+
+// ─── Surface / height utilities ─────────────────────────────────────────────
+
+/**
+ * Returns the highest support surface Y under a sample (X, Z) point.
+ * Returns 0 (room floor) when nothing is beneath.
+ */
+export function supportSurfaceYAt(
+  x: number,
+  z: number,
+  objectMap: Map<string, THREE.Object3D>,
+  excludeId?: string,
+  placements?: Placement[],
+): number {
+  let maxY = 0;
+  for (const [id, obj] of objectMap) {
+    if (id === excludeId) continue;
+    if (excludeId && placements && skipCollisionPair(placements, excludeId, id)) continue;
+    const box = worldBox3(obj);
+    if (x < box.min.x - EPS || x > box.max.x + EPS || z < box.min.z - EPS || z > box.max.z + EPS) {
+      continue;
+    }
+    maxY = Math.max(maxY, box.max.y);
+  }
+  return maxY;
+}
+
+/**
+ * Returns the highest support surface under an entire footprint box.
+ * Samples four corners plus center so the full footprint can rest stably.
+ */
+export function supportBaseUnderFootprint(
+  foot: THREE.Box3,
+  objectMap: Map<string, THREE.Object3D>,
+  excludeId: string,
+  placements: Placement[],
+): number {
+  const samples: Array<[number, number]> = [
+    [foot.min.x, foot.min.z],
+    [foot.max.x, foot.min.z],
+    [foot.min.x, foot.max.z],
+    [foot.max.x, foot.max.z],
+    [(foot.min.x + foot.max.x) / 2, (foot.min.z + foot.max.z) / 2],
+  ];
+  let base = 0;
+  for (const [sx, sz] of samples) {
+    base = Math.max(base, supportSurfaceYAt(sx, sz, objectMap, excludeId, placements));
+  }
+  return base;
+}
+
+/** Builds a synthetic AABB on the room floor; used for pre-placement fit checks. */
+export function syntheticPlacementBox(
+  x: number,
+  z: number,
+  fp: ModelFootprint,
+  scale: number,
+): THREE.Box3 {
+  return syntheticPlacementBoxOnSurface(x, z, 0, fp, scale);
+}
+
+/** Builds a synthetic AABB on an arbitrary support height; used for stacking fit checks. */
+export function syntheticPlacementBoxOnSurface(
+  x: number,
+  z: number,
+  baseY: number,
+  fp: ModelFootprint,
+  scale: number,
+): THREE.Box3 {
+  const sx = fp.hx * scale;
+  const sz = fp.hz * scale;
+  const top = fp.yTop * scale;
+  return new THREE.Box3(
+    new THREE.Vector3(x - sx, baseY, z - sz),
+    new THREE.Vector3(x + sx, baseY + top, z + sz),
+  );
+}
+
+// ─── Private helpers ────────────────────────────────────────────────────────
+
+/** Clamps footprint center to room bounds then snaps to grid. */
+function clampFootprintCenterToRoom(
+  x: number,
+  z: number,
+  fp: ModelFootprint,
+  scale: number,
+  roomHalfW: number,
+  roomHalfL: number,
+): { x: number; z: number } {
+  const sx = fp.hx * scale;
+  const sz = fp.hz * scale;
+  const minCx = -roomHalfW + sx;
+  const maxCx = roomHalfW - sx;
+  const minCz = -roomHalfL + sz;
+  const maxCz = roomHalfL - sz;
+  let cx = x;
+  let cz = z;
+  if (minCx <= maxCx) cx = Math.min(maxCx, Math.max(minCx, x));
+  else cx = 0;
+  if (minCz <= maxCz) cz = Math.min(maxCz, Math.max(minCz, z));
+  else cz = 0;
+  const [qx, qz] = snapXZ(cx, cz);
+  return { x: qx, z: qz };
+}
+
+/** Locks oversized footprint axes to center (0) when the model is wider than the room. */
+function scaleFootprintCenterIfDegenerate(
+  center: { x: number; z: number },
+  fp: ModelFootprint,
+  scale: number,
+  roomHalfW: number,
+  roomHalfL: number,
+): { x: number; z: number } {
+  const sx = fp.hx * scale;
+  const sz = fp.hz * scale;
+  let x = center.x;
+  let z = center.z;
+  if (sx > roomHalfW + EPS) x = 0;
+  if (sz > roomHalfL + EPS) z = 0;
+  const [qx, qz] = snapXZ(x, z);
+  return { x: qx, z: qz };
+}
+
+/** Skips collision between parent and descendant; intentionally attached pieces should not block each other. */
+function skipCollisionPair(placements: Placement[], idA: string, idB: string): boolean {
+  return isAncestorOf(placements, idA, idB) || isAncestorOf(placements, idB, idA);
 }

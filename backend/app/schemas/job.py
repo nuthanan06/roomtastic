@@ -32,3 +32,4 @@ class HunyuanGenerateBody(HunyuanGenerateOptions):
     length: Optional[int] = None
     height: Optional[int] = None
     tags: list[str] = Field(default_factory=list)
+    user_id: Optional[str] = None

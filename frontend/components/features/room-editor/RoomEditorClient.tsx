@@ -90,6 +90,28 @@ function mockCatalogMatchForUrl(glbUrl: string): (typeof MOCK_CATALOG)[number] |
   return MOCK_CATALOG.find((m) => canonicalModelUrlForLoader(publicAssetUrl(m.glbUrl)) === canon);
 }
 
+function InventoryListThumb({ item }: { item: InventoryOut }) {
+  if (item.thumbnail_url) {
+    return (
+      <Image
+        src={item.thumbnail_url}
+        alt={`${item.name} preview`}
+        width={56}
+        height={56}
+        unoptimized
+        sizes="56px"
+        className="h-14 w-14 shrink-0 rounded-lg border border-white/10 object-cover"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-slate-900/80 text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
+      3D
+    </div>
+  );
+}
+
 /**
  * Renders the right-sidebar panel showing details of the selected furniture piece.
  * Displays: name, inventory source, thumbnail, model URL, transform (position/rotation/scale),
@@ -306,7 +328,8 @@ export default function RoomEditorClient({
   initialInventory?: InventoryOut[];
 }) {
   const queryClient = useQueryClient();
-  const inventoryQuery = useInventoryQuery(token, initialInventory);
+  const userId = room.user_id;
+  const inventoryQuery = useInventoryQuery(token, userId, initialInventory);
 
   const inventory = useMemo(() => inventoryQuery.data ?? [], [inventoryQuery.data]);
   const inventoryLoading = inventoryQuery.isLoading && inventory.length === 0;
@@ -338,12 +361,19 @@ export default function RoomEditorClient({
     return list;
   }, [inventory, sessionUploadSet]);
 
-  const sessionUploads = useMemo(
+  const userInventory = useMemo(
     () =>
-      sessionUploadInventoryIds
-        .map((id) => invById.get(id))
-        .filter((row): row is InventoryOut => !!row),
-    [invById, sessionUploadInventoryIds],
+      orderedInventory.filter(
+        (item) =>
+          (!!item.user_id && item.user_id.toLowerCase() === userId.toLowerCase()) ||
+          sessionUploadSet.has(item.inventory_id),
+      ),
+    [orderedInventory, userId, sessionUploadSet],
+  );
+
+  const sharedInventory = useMemo(
+    () => orderedInventory,
+    [orderedInventory],
   );
 
   const [placements, setPlacements] = useState<Placement[]>(() =>
@@ -594,11 +624,13 @@ export default function RoomEditorClient({
       const imageBase64 = await fileToBase64Data(generateImageFile);
       const createRes = await createHunyuanGenerateJob(token, {
         image_base64: imageBase64,
+        image_mime: generateImageFile.type || null,
         inventory_name: generateName.trim() || "Generated Item",
         inventory_category: generateCategory.trim() || "custom",
         inventory_description: generateDescription.trim() || null,
         include_texture: generateIncludeTexture,
         tags: ["upload", "hunyuan"],
+        user_id: userId,
       });
 
       setGenerationJobId(createRes.job_id);
@@ -642,7 +674,7 @@ export default function RoomEditorClient({
       }
       setGenerationStatus("succeeded");
       setGenerationError(null);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory(userId) });
       setIsGenerateModalOpen(false);
       onPickGenerationImage(null);
     },
@@ -837,51 +869,17 @@ export default function RoomEditorClient({
                 ))}
               </div>
             </div>
-            {sessionUploads.length > 0 ? (
-              <div>
-                <h3 className="rt-editor-heading mb-2 text-emerald-400/90">Your uploads</h3>
-                <div className="space-y-2">
-                  {sessionUploads.map((item) => (
-                    <button
-                      key={item.inventory_id}
-                      type="button"
-                      draggable
-                      onDragStart={(e) => {
-                        const raw =
-                          item.model_url &&
-                          (item.model_url.endsWith(".glb") || item.model_url.endsWith(".gltf"))
-                            ? item.model_url
-                            : "/mock-models/table.glb";
-                        const url = publicAssetUrl(raw);
-                        e.dataTransfer.setData("modelUrl", url);
-                        e.dataTransfer.setData("text/plain", url);
-                        e.dataTransfer.setData("label", item.name);
-                        e.dataTransfer.setData("inventoryId", item.inventory_id);
-                        e.dataTransfer.effectAllowed = "copy";
-                        setCatalogDragging(true);
-                        setDragModelUrl(url);
-                      }}
-                      onClick={() => addInventoryClick(item)}
-                      className="w-full rounded-xl border border-emerald-500/35 bg-emerald-950/25 px-3 py-2 text-left transition hover:border-emerald-300/50"
-                    >
-                      <div className="text-sm font-medium text-white">{item.name}</div>
-                      <div className="text-xs text-slate-300">{item.category ?? "uploaded"}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
             <div>
-              <h3 className="rt-editor-heading mb-2 text-sky-400/90">Inventory</h3>
+              <h3 className="rt-editor-heading mb-2 text-emerald-400/90">User Inventory</h3>
               {inventoryLoading ? (
                 <p className="text-xs text-slate-500">Loading inventory...</p>
               ) : inventoryError ? (
                 <p className="text-xs text-red-300/90">{inventoryError}</p>
-              ) : orderedInventory.length === 0 ? (
-                <p className="text-xs text-slate-500">No inventory rows yet.</p>
+              ) : userInventory.length === 0 ? (
+                <p className="text-xs text-slate-500">No uploaded inventory yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {orderedInventory.slice(0, 40).map((item) => (
+                  {userInventory.slice(0, 40).map((item) => (
                     <button
                       key={item.inventory_id}
                       type="button"
@@ -902,10 +900,65 @@ export default function RoomEditorClient({
                         setDragModelUrl(url);
                       }}
                       onClick={() => addInventoryClick(item)}
-                      className="w-full rounded-xl border border-white/10 bg-sky-950/20 px-3 py-2 text-left transition hover:border-sky-400/40"
+                      className="flex w-full items-center gap-3 rounded-xl border border-emerald-500/35 bg-emerald-950/25 px-3 py-2 text-left transition hover:border-emerald-300/50"
                     >
-                      <div className="text-sm font-medium text-white">{item.name}</div>
-                      <div className="text-xs text-slate-400">{item.category ?? "—"}</div>
+                      <InventoryListThumb item={item} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="truncate text-sm font-medium text-white">{item.name}</div>
+                          {sessionUploadSet.has(item.inventory_id) ? (
+                            <span className="rounded-full border border-emerald-300/30 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-100 uppercase">
+                              New
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="truncate text-xs text-slate-300">
+                          {item.category ?? "uploaded"}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <h3 className="rt-editor-heading mb-2 text-sky-400/90">Shared Catalog Inventory</h3>
+              {inventoryLoading ? (
+                <p className="text-xs text-slate-500">Loading inventory...</p>
+              ) : inventoryError ? (
+                <p className="text-xs text-red-300/90">{inventoryError}</p>
+              ) : sharedInventory.length === 0 ? (
+                <p className="text-xs text-slate-500">No shared inventory rows yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {sharedInventory.slice(0, 40).map((item) => (
+                    <button
+                      key={item.inventory_id}
+                      type="button"
+                      draggable
+                      onDragStart={(e) => {
+                        const raw =
+                          item.model_url &&
+                          (item.model_url.endsWith(".glb") || item.model_url.endsWith(".gltf"))
+                            ? item.model_url
+                            : "/mock-models/table.glb";
+                        const url = publicAssetUrl(raw);
+                        e.dataTransfer.setData("modelUrl", url);
+                        e.dataTransfer.setData("text/plain", url);
+                        e.dataTransfer.setData("label", item.name);
+                        e.dataTransfer.setData("inventoryId", item.inventory_id);
+                        e.dataTransfer.effectAllowed = "copy";
+                        setCatalogDragging(true);
+                        setDragModelUrl(url);
+                      }}
+                      onClick={() => addInventoryClick(item)}
+                      className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-sky-950/20 px-3 py-2 text-left transition hover:border-sky-400/40"
+                    >
+                      <InventoryListThumb item={item} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-white">{item.name}</div>
+                        <div className="truncate text-xs text-slate-400">{item.category ?? "—"}</div>
+                      </div>
                     </button>
                   ))}
                 </div>

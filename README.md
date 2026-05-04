@@ -113,26 +113,30 @@ python3 main.py
 ### Backend Migrations (Alembic)
 
 Schema is managed by Alembic.
+For local development, make sure PostgreSQL is running first (for example `docker compose up -d db` from the repo root).
 
 Apply migrations:
 
 ```bash
 cd backend
-alembic upgrade head
+source venv/bin/activate
+python -m alembic upgrade head
 ```
 
 Create a new migration after model changes:
 
 ```bash
 cd backend
-alembic revision --autogenerate -m "describe_change"
+source venv/bin/activate
+python -m alembic revision --autogenerate -m "describe_change"
 ```
 
 Roll back one migration:
 
 ```bash
 cd backend
-alembic downgrade -1
+source venv/bin/activate
+python -m alembic downgrade -1
 ```
 
 Docker backend startup runs `alembic upgrade head` automatically via

@@ -24,19 +24,21 @@ const DEFAULT_ROOM_PAYLOAD = {
 export default function RoomsPage() {
   const router = useRouter();
   const [createError, setCreateError] = useState<string | null>(null);
-
-  const auth = useMemo<RoomsAuthState | null>(() => {
-    const token = getToken();
-    const user = getStoredUser();
-    if (!token || !user) return null;
-    return { token, user };
-  }, []);
+  const [auth, setAuth] = useState<RoomsAuthState | null>(null);
+  const [authResolved, setAuthResolved] = useState(false);
 
   useEffect(() => {
-    if (!auth) {
+    const token = getToken();
+    const user = getStoredUser();
+    if (!token || !user) {
+      setAuth(null);
+      setAuthResolved(true);
       router.push("/login");
+      return;
     }
-  }, [auth, router]);
+    setAuth({ token, user });
+    setAuthResolved(true);
+  }, [router]);
 
   const session = useMemo(
     () => (auth ? { token: auth.token, userId: auth.user.user_id } : null),
@@ -54,6 +56,10 @@ export default function RoomsPage() {
 
   const rooms = roomsQuery.data ?? [];
   const error = createError ?? (roomsQuery.error ? getErrorMessage(roomsQuery.error) : null);
+
+  if (!authResolved) {
+    return <div className="rt-app-shell min-h-screen p-6 text-sm text-indigo-200">Loading...</div>;
+  }
 
   const handleCreateRoom = () => {
     if (!session) {

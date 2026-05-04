@@ -1089,15 +1089,15 @@ function SceneInner({
   return (
     <>
       <color attach="background" args={["#0f0a1e"]} />
-      <ambientLight intensity={0.5} color="#99a5e8" />
-      <directionalLight position={[8, 14, 6]} intensity={1.05} castShadow color="#e8ecff" />
-      <hemisphereLight args={["#3730a3", "#1e1b4b", 0.38]} />
+      <ambientLight intensity={0.85} color="#b0b8f0" />
+      <directionalLight position={[8, 14, 6]} intensity={1.8} castShadow color="#eef0ff" />
+      <hemisphereLight args={["#4f46e5", "#312e81", 0.6]} />
       <pointLight
         position={[0, roomH * 0.92, 0]}
-        intensity={0.35}
-        distance={Math.max(roomW, roomL) * 1.4}
-        color="#c4b5fd"
-        decay={2}
+        intensity={1.2}
+        distance={Math.max(roomW, roomL) * 2.0}
+        color="#e0d7ff"
+        decay={1.5}
       />
 
       <EditorFloor

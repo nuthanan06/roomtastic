@@ -302,8 +302,60 @@ def _public_model_url(filename: str) -> str:
     return f"{PUBLIC_BACKEND_URL}/glb-models/{filename}"
 
 
+def _image_ext_from_mime(mime: str | None) -> str | None:
+    if not mime:
+        return None
+    m = mime.strip().lower()
+    if m == "image/png":
+        return "png"
+    if m in {"image/jpeg", "image/jpg"}:
+        return "jpg"
+    if m == "image/webp":
+        return "webp"
+    if m == "image/gif":
+        return "gif"
+    return None
+
+
+def _image_ext_from_bytes(raw: bytes) -> str:
+    if len(raw) >= 8 and raw[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if len(raw) >= 3 and raw[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if len(raw) >= 6 and raw[:6] in {b"GIF87a", b"GIF89a"}:
+        return "gif"
+    if len(raw) >= 12 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "webp"
+    return "png"
+
+
+def _write_thumbnail_file(job_id, content: bytes, *, ext: str) -> tuple[str, str]:
+    out_dir = Path(HUNYUAN_OUTPUT_DIR)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"hunyuan_{job_id}_thumb.{ext}"
+    file_path = out_dir / filename
+    file_path.write_bytes(content)
+    return filename, str(file_path)
+
+
+def _resolve_thumbnail_url(payload: dict, *, job_id, image_base64: str) -> tuple[str | None, str | None]:
+    image_url = str(payload.get("image_url") or "").strip()
+    if image_url:
+        return image_url, None
+
+    if not image_base64:
+        return None, None
+
+    image_bytes = _decode_base64_bytes(image_base64)
+    ext = _image_ext_from_mime(str(payload.get("image_mime") or "").strip()) or _image_ext_from_bytes(
+        image_bytes
+    )
+    thumb_filename, thumb_path = _write_thumbnail_file(job_id, image_bytes, ext=ext)
+    return _public_model_url(thumb_filename), thumb_path
+
+
 def _create_inventory_and_optional_furniture(
-    payload: dict, *, model_url: str, runpod_job_id: str
+    payload: dict, *, model_url: str, thumbnail_url: str | None, runpod_job_id: str
 ) -> dict:
     name_of_furniture = str(payload.get("name_of_furniture") or "").strip()
     inventory_name = str(payload.get("inventory_name") or name_of_furniture).strip()
@@ -326,6 +378,12 @@ def _create_inventory_and_optional_furniture(
     tags = _normalize_tags(payload.get("tags"))
     now = _now()
 
+    user_id_raw = str(payload.get("user_id") or payload.get("userId") or "").strip()
+    try:
+        user_uuid = UUID(user_id_raw) if user_id_raw else None
+    except ValueError:
+        user_uuid = None
+
     with session_scope() as s:
         inventory = Inventory(
             name=inventory_name,
@@ -334,10 +392,12 @@ def _create_inventory_and_optional_furniture(
             length=length if length > 0 else None,
             height=height if height > 0 else None,
             model_url=model_url,
+            thumbnail_url=thumbnail_url,
             description=inventory_description or None,
             source="hunyuan.runpod",
             source_id=str(runpod_job_id),
             tags=tags,
+            user_id=user_uuid,
             created_at=now,
             updated_at=now,
         )
@@ -403,15 +463,23 @@ def _handle_hunyuan_generate(job_id, payload: dict):
 
     filename, file_path = _write_glb_file(job_id, model_bytes)
     model_url = _public_model_url(filename)
+    thumbnail_url, thumbnail_path = _resolve_thumbnail_url(
+        payload, job_id=job_id, image_base64=image_base64
+    )
 
     created_records = _create_inventory_and_optional_furniture(
-        payload, model_url=model_url, runpod_job_id=runpod_job_id
+        payload,
+        model_url=model_url,
+        thumbnail_url=thumbnail_url,
+        runpod_job_id=runpod_job_id,
     )
     return {
         "runpod_job_id": runpod_job_id,
         "runpod_status": str(completed.get("status") or "COMPLETED"),
         "model_url": model_url,
         "model_path": file_path,
+        "thumbnail_url": thumbnail_url,
+        "thumbnail_path": thumbnail_path,
         **created_records,
     }
 

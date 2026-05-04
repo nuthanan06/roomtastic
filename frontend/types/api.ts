@@ -56,6 +56,7 @@ export type FurnitureOut = {
 
 export type InventoryOut = {
   inventory_id: string;
+  user_id?: string | null;
   name: string;
   category: string | null;
   width?: number | null;
@@ -136,6 +137,8 @@ export type CreateRoomInput = {
 export type HunyuanGenerateJobInput = {
   image_base64?: string | null;
   image_url?: string | null;
+  image_mime?: string | null;
+  user_id?: string | null;
   inventory_name?: string | null;
   inventory_category?: string | null;
   inventory_description?: string | null;

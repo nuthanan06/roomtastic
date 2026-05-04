@@ -31,8 +31,11 @@ def _normalize_tags(raw: list[str] | None) -> list[str]:
     return out
 
 
-def list_inventory(db: Session) -> list:
-    return db.query(Inventory).order_by(Inventory.updated_at.desc()).all()
+def list_inventory(db: Session, user_id: UUID | None = None) -> list:
+    q = db.query(Inventory)
+    if user_id is None:
+        q = q.filter(Inventory.user_id == None)  # noqa: E711
+    return q.order_by(Inventory.updated_at.desc()).all()
 
 
 def get_inventory(db: Session, inventory_id: UUID) -> Inventory:
@@ -65,12 +68,14 @@ def _create_inventory_from_hunyuan(db: Session, inventory_in: InventoryCreate) -
         "inventory_name": (inventory_in.name or "").strip() or "Generated Item",
         "inventory_category": inventory_in.category,
         "inventory_description": inventory_in.description,
+        "user_id": str(inventory_in.user_id) if inventory_in.user_id else None,
         "width": inventory_in.width,
         "length": inventory_in.length,
         "height": inventory_in.height,
         "tags": _normalize_tags(inventory_in.tags),
         "image_base64": opts.image_base64,
         "image_url": opts.image_url,
+        "image_mime": opts.image_mime,
         "quality": opts.quality,
         "include_texture": opts.include_texture,
         "num_inference_steps": opts.num_inference_steps,

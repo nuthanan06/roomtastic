@@ -40,8 +40,9 @@ export function fetchRoomOpenings(roomId: string, token: string): Promise<Openin
   );
 }
 
-export function fetchInventory(token: string): Promise<InventoryOut[]> {
-  return apiFetch<InventoryOut[]>("/inventory", { token }).then((rows) =>
+export function fetchInventory(token: string, userId?: string | null): Promise<InventoryOut[]> {
+  const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+  return apiFetch<InventoryOut[]>(`/inventory${qs}`, { token }).then((rows) =>
     ensureArray<InventoryOut>(rows),
   );
 }

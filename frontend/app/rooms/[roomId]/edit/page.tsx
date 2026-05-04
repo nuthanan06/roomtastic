@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useState } from "react";
 import RoomEditorClient from "@/components/features/room-editor/RoomEditorClient";
 import {
   openingOutToOpening,
@@ -34,14 +34,17 @@ export default function EditRoomPage() {
   const router = useRouter();
   const params = useParams<{ roomId: string }>();
   const roomId = params.roomId;
-
-  const sessionToken = useMemo(() => getToken(), []);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [sessionResolved, setSessionResolved] = useState(false);
 
   useEffect(() => {
-    if (!sessionToken) {
+    const token = getToken();
+    setSessionToken(token);
+    setSessionResolved(true);
+    if (!token) {
       router.replace("/login");
     }
-  }, [router, sessionToken]);
+  }, [router]);
 
   const { roomQuery, furnitureQuery, openingsQuery } = useRoomEditorQueries(roomId, sessionToken);
 
@@ -55,6 +58,10 @@ export default function EditRoomPage() {
 
   const error = roomQuery.error ?? furnitureQuery.error ?? openingsQuery.error;
   const errorMessage = error ? getErrorMessage(error) : null;
+
+  if (!sessionResolved) {
+    return <LoadingEditor message="Loading editor..." error={null} />;
+  }
 
   if (!sessionToken) {
     return <LoadingEditor message="Redirecting to login..." error={null} />;

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRoomDetailQueries } from "@/hooks/useRoomQueries";
 import { getToken } from "@/lib/auth";
 import { getErrorMessage } from "@/utils/errors";
@@ -10,16 +10,19 @@ import { getErrorMessage } from "@/utils/errors";
 export default function RoomDetailPage() {
   const router = useRouter();
   const params = useParams<{ roomId: string }>();
-  const roomId = useMemo(() => params.roomId, [params]);
-
-  const token = useMemo(() => getToken(), []);
+  const roomId = params.roomId;
+  const [token, setToken] = useState<string | null>(null);
+  const [tokenResolved, setTokenResolved] = useState(false);
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token) {
+    const sessionToken = getToken();
+    setToken(sessionToken);
+    setTokenResolved(true);
+    if (!sessionToken) {
       router.push("/login");
     }
-  }, [token, router]);
+  }, [router]);
 
   const { roomQuery, shoppingQuery } = useRoomDetailQueries(roomId, token);
 
@@ -34,6 +37,14 @@ export default function RoomDetailPage() {
       `${label} is still a UI placeholder and is not wired to backend room endpoints yet.`,
     );
   };
+
+  if (!tokenResolved) {
+    return (
+      <div className="rt-app-shell min-h-screen p-6 text-sm text-indigo-200">
+        Loading room...
+      </div>
+    );
+  }
 
   if (!token) {
     return (

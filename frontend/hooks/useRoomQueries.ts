@@ -23,7 +23,7 @@ export const queryKeys = {
   roomShopping: (roomId: string) => ["room-shopping", roomId] as const,
   roomFurniture: (roomId: string) => ["room-furniture", roomId] as const,
   roomOpenings: (roomId: string) => ["room-openings", roomId] as const,
-  inventory: ["inventory"] as const,
+  inventory: (userId?: string | null) => ["inventory", userId ?? "global"] as const,
 };
 
 // Query hooks
@@ -102,12 +102,16 @@ export function useRoomEditorQueries(roomId: string, token: string | null) {
 }
 
 // Query hooks
-export function useInventoryQuery(token: string | null, initialData?: InventoryOut[]) {
+export function useInventoryQuery(
+  token: string | null,
+  userId?: string | null,
+  initialData?: InventoryOut[],
+) {
   const seeded = (initialData?.length ?? 0) > 0;
   return useQuery({
-    queryKey: queryKeys.inventory,
+    queryKey: queryKeys.inventory(userId),
     enabled: !!token,
-    queryFn: () => fetchInventory(token!),
+    queryFn: () => fetchInventory(token!, userId),
     ...(seeded ? { initialData } : {}),
   });
 }

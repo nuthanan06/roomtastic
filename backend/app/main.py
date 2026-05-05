@@ -25,6 +25,12 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api")
 
-glb_models_dir = Path(__file__).resolve().parents[1] / "glb_models"
+import os
+_glb_dir_env = os.environ.get("HUNYUAN_OUTPUT_DIR", "")
+glb_models_dir = (
+    Path(_glb_dir_env).expanduser().resolve()
+    if _glb_dir_env
+    else Path(__file__).resolve().parents[1] / "glb_models"
+)
 glb_models_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/glb-models", StaticFiles(directory=str(glb_models_dir)), name="glb-models")

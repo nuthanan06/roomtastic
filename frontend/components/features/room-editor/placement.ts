@@ -18,8 +18,6 @@ export type Placement = {
   localScale?: number;
 };
 
-const FALLBACK_GLB = "/mock-models/chair.glb";
-
 // ─── Public entry points ────────────────────────────────────────────────────
 
 /**
@@ -68,11 +66,8 @@ export function newPlacementFromCatalog(opts: {
 
 // ─── Support utility ────────────────────────────────────────────────────────
 
-/** Resolves an inventory row to a loader-safe GLB URL, falling back to the default chair model. */
+/** Resolves an inventory row to a loader-safe GLB URL. Returns empty string if no valid URL. */
 export function inventoryToGlb(inv: { model_url?: string | null } | null | undefined): string {
   const u = inv?.model_url;
-  if (u && (u.endsWith(".glb") || u.endsWith(".gltf"))) {
-    return u;
-  }
-  return FALLBACK_GLB;
+  return u && (u.endsWith(".glb") || u.endsWith(".gltf")) ? u : "";
 }

@@ -16,8 +16,12 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 @router.get("", response_model=list[InventoryOut])
 def list_inventory(
     user_id: Optional[UUID] = Query(default=None),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # If user_id is provided it must match the authenticated user.
+    if user_id is not None and user_id != current_user.user_id:
+        user_id = current_user.user_id
     rows = ctrl.list_inventory(db, user_id=user_id)
     return [InventoryOut.model_validate(x) for x in rows]
 

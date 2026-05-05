@@ -637,7 +637,7 @@ function PlacementBranch({
       }}
     >
       <Suspense fallback={null}>
-        <PlacedModelContent p={p} highlight={highlight} />
+        {p.glbUrl ? <PlacedModelContent p={p} highlight={highlight} /> : null}
       </Suspense>
       {placementEmitsWarmGlow(p) ? <PlacementWarmGlow /> : null}
       {children.map((c) => (

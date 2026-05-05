@@ -311,51 +311,50 @@ export default function RoomEditorClient({
 }) {
   const queryClient = useQueryClient();
   const userId = room.user_id;
-  const inventoryQuery = useInventoryQuery(token, userId, initialInventory);
 
-  const inventory = useMemo(() => inventoryQuery.data ?? [], [inventoryQuery.data]);
-  const inventoryLoading = inventoryQuery.isLoading && inventory.length === 0;
-  const inventoryError = inventoryQuery.error ? getErrorMessage(inventoryQuery.error) : null;
-  const [sessionUploadInventoryIds, setSessionUploadInventoryIds] = useState<string[]>([]);
+  // User uploads: GET /inventory?user_id=<userId> — only this user's generated items.
+  const userInventoryQuery = useInventoryQuery(token, userId, initialInventory);
+  // Shared catalog: GET /inventory — all items in the table, no ownership filter.
+  const sharedInventoryQuery = useInventoryQuery(token);
 
-  const invById = useMemo(() => {
-    const m = new Map<string, InventoryOut>();
-    inventory.forEach((i) => m.set(i.inventory_id, i));
-    return m;
-  }, [inventory]);
-
-  const sessionUploadSet = useMemo(
-    () => new Set(sessionUploadInventoryIds),
-    [sessionUploadInventoryIds],
-  );
-
-  const orderedInventory = useMemo(() => {
-    const list = [...inventory];
-    list.sort((a, b) => {
-      const aUpload = sessionUploadSet.has(a.inventory_id) ? 1 : 0;
-      const bUpload = sessionUploadSet.has(b.inventory_id) ? 1 : 0;
-      if (aUpload !== bUpload) return bUpload - aUpload;
-
+  const userInventory = useMemo(() => {
+    return [...(userInventoryQuery.data ?? [])].sort((a, b) => {
       const aTs = Date.parse(a.updated_at ?? a.created_at ?? "");
       const bTs = Date.parse(b.updated_at ?? b.created_at ?? "");
       return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
     });
-    return list;
-  }, [inventory, sessionUploadSet]);
+  }, [userInventoryQuery.data]);
 
-  const userInventory = useMemo(
-    () =>
-      orderedInventory.filter(
-        (item) =>
-          (!!item.user_id && item.user_id.toLowerCase() === userId.toLowerCase()) ||
-          sessionUploadSet.has(item.inventory_id),
-      ),
-    [orderedInventory, userId, sessionUploadSet],
-  );
+  const sharedInventory = useMemo(() => {
+    return [...(sharedInventoryQuery.data ?? [])].sort((a, b) => {
+      const aTs = Date.parse(a.updated_at ?? a.created_at ?? "");
+      const bTs = Date.parse(b.updated_at ?? b.created_at ?? "");
+      return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+    });
+  }, [sharedInventoryQuery.data]);
 
-  const sharedInventory = useMemo(
-    () => orderedInventory,
-    [orderedInventory],
+  // Combined map for resolving inventory-backed placement URLs (covers both sections).
+  const invById = useMemo(() => {
+    const m = new Map<string, InventoryOut>();
+    [...(userInventoryQuery.data ?? []), ...(sharedInventoryQuery.data ?? [])].forEach((i) =>
+      m.set(i.inventory_id, i),
+    );
+    return m;
+  }, [userInventoryQuery.data, sharedInventoryQuery.data]);
+
+  const inventoryLoading =
+    (userInventoryQuery.isLoading && userInventory.length === 0) ||
+    (sharedInventoryQuery.isLoading && sharedInventory.length === 0);
+  const inventoryError = userInventoryQuery.error
+    ? getErrorMessage(userInventoryQuery.error)
+    : sharedInventoryQuery.error
+      ? getErrorMessage(sharedInventoryQuery.error)
+      : null;
+
+  // Derive combined inventory list used for hydrating placement model URLs.
+  const inventory = useMemo(
+    () => [...userInventory, ...sharedInventory],
+    [userInventory, sharedInventory],
   );
 
   const [placements, setPlacements] = useState<Placement[]>(() =>
@@ -634,17 +633,10 @@ export default function RoomEditorClient({
       }
       return latest;
     },
-    onSuccess: async (job) => {
-      const inventoryIdRaw = job.result?.inventory_id;
-      if (typeof inventoryIdRaw === "string" && inventoryIdRaw.length > 0) {
-        setSessionUploadInventoryIds((prev) => [
-          inventoryIdRaw,
-          ...prev.filter((id) => id !== inventoryIdRaw),
-        ]);
-      }
+    onSuccess: async () => {
       setGenerationStatus("succeeded");
       setGenerationError(null);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory(userId) });
+      await queryClient.invalidateQueries({ queryKey: ["inventory"] });
       setIsGenerateModalOpen(false);
       onPickGenerationImage(null);
     },
@@ -843,11 +835,6 @@ export default function RoomEditorClient({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <div className="truncate text-sm font-medium text-white">{item.name}</div>
-                          {sessionUploadSet.has(item.inventory_id) ? (
-                            <span className="rounded-full border border-emerald-300/30 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-100 uppercase">
-                              New
-                            </span>
-                          ) : null}
                         </div>
                         <div className="truncate text-xs text-slate-300">
                           {item.category ?? "uploaded"}

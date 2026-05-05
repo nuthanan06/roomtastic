@@ -3,8 +3,6 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
-from app.schemas.hunyuan import HunyuanGenerateOptions
-
 
 class InventoryBase(BaseModel):
     name: str
@@ -24,9 +22,16 @@ class InventoryBase(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
-class InventoryCreate(InventoryBase):
+class InventoryCreate(BaseModel):
     name: Optional[str] = None
-    hunyuan: Optional[HunyuanGenerateOptions] = None
+    category: Optional[str] = None
+    user_id: Optional[UUID] = None
+    width: Optional[int] = None
+    length: Optional[int] = None
+    height: Optional[int] = None
+    model_url: Optional[str] = None
+    description: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class InventoryUpdate(InventoryBase):

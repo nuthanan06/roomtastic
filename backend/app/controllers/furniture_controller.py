@@ -54,6 +54,7 @@ def create_furniture(
 ) -> Furniture:
     if not db.get(Room, room_id):
         raise HTTPException(status_code=404, detail="Room not found")
+
     coords = furniture_in.coordinates or '{"x":0,"y":0,"z":0}'
     now = datetime.utcnow()
     f = Furniture(

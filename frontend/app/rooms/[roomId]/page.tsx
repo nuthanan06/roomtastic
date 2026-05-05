@@ -2,23 +2,21 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRoomDetailQueries } from "@/hooks/useRoomQueries";
-import { getToken } from "@/lib/auth";
+import { useClientToken } from "@/lib/auth";
 import { getErrorMessage } from "@/utils/errors";
 
 export default function RoomDetailPage() {
   const router = useRouter();
   const params = useParams<{ roomId: string }>();
-  const roomId = useMemo(() => params.roomId, [params]);
-
-  const token = useMemo(() => getToken(), []);
+  const roomId = params.roomId;
   const [placeholderNotice, setPlaceholderNotice] = useState<string | null>(null);
 
+  const token = useClientToken();
+
   useEffect(() => {
-    if (!token) {
-      router.push("/login");
-    }
+    if (!token) router.push("/login");
   }, [token, router]);
 
   const { roomQuery, shoppingQuery } = useRoomDetailQueries(roomId, token);

@@ -1,32 +1,91 @@
+"""
+Roomtastic background worker.
+
+Polls the jobs table for pending work and dispatches to the appropriate handler.
+Add new job types by registering a handler in HANDLERS below.
+
+Job lifecycle: pending → running → succeeded | failed
+"""
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-BACKEND = os.environ.get("BACKEND_PATH", os.path.join(ROOT, "backend"))
+
+# ── Path setup ───────────────────────────────────────────────────────────────
+
+def _resolve_path(raw: str | None, *, base: Path, default: Path) -> str:
+    candidate = Path(raw).expanduser() if raw else default
+    if not candidate.is_absolute():
+        candidate = (base / candidate).resolve()
+    return str(candidate)
+
+
+WORKERS_DIR = Path(__file__).resolve().parent
+ROOT = WORKERS_DIR.parent
+BACKEND = _resolve_path(
+    os.environ.get("BACKEND_PATH"), base=WORKERS_DIR, default=ROOT / "backend"
+)
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
-from sqlalchemy import select
+from sqlalchemy import select  # noqa: E402
 
-from app.models.job import Job, JobStatus
-from app.db.session import session_scope
-from app.db.init_db import init_db
+from app.db.init_db import init_db  # noqa: E402
+from app.db.session import session_scope  # noqa: E402
+from app.models.job import Job, JobStatus  # noqa: E402
+
+
+# ── Configuration ─────────────────────────────────────────────────────────────
 
 POLL_INTERVAL_SECONDS = float(os.environ.get("WORKER_POLL_INTERVAL", "1.0"))
+HUNYUAN_OUTPUT_DIR = _resolve_path(
+    os.environ.get("HUNYUAN_OUTPUT_DIR"),
+    base=ROOT,
+    default=Path(BACKEND) / "glb_models",
+)
+PUBLIC_BACKEND_URL = os.environ.get("PUBLIC_BACKEND_URL", "http://localhost:8000").rstrip("/")
 
+
+# ── Job handlers ──────────────────────────────────────────────────────────────
+
+# Import after path setup so app.* imports resolve correctly.
+from hunyuan import handle_hunyuan_generate  # noqa: E402
+
+HANDLERS = {
+    "hunyuan.generate": handle_hunyuan_generate,
+}
+
+
+# ── Startup ───────────────────────────────────────────────────────────────────
+
+def _backfill_legacy_output_dir() -> None:
+    """Copies any GLBs from the old output location into the current one."""
+    target_dir = Path(HUNYUAN_OUTPUT_DIR)
+    legacy_dir = WORKERS_DIR / "backend" / "glb_models"
+    if not legacy_dir.exists() or legacy_dir.resolve() == target_dir.resolve():
+        return
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for src in legacy_dir.glob("*.glb"):
+        dst = target_dir / src.name
+        if not dst.exists():
+            shutil.copy2(src, dst)
+
+
+# ── Job queue ─────────────────────────────────────────────────────────────────
 
 def _now() -> datetime:
     return datetime.utcnow()
 
 
 def _claim_next_job():
-    """Claim the next pending job using FOR UPDATE SKIP LOCKED for concurrency safety.
-
-    FOR UPDATE SKIP LOCKED ensures only one worker claims each job, preventing race conditions.
+    """
+    Atomically claims the next pending job using FOR UPDATE SKIP LOCKED.
+    Returns the job_id if one was claimed, otherwise None.
     """
     with session_scope() as s:
         j = (
@@ -53,6 +112,7 @@ def _claim_next_job():
 
 
 def _finish_job(job_id, *, status: JobStatus, result=None, error: str | None = None):
+    """Writes the terminal status, result, and error onto a completed job."""
     with session_scope() as s:
         j = s.get(Job, job_id)
         if not j:
@@ -65,35 +125,19 @@ def _finish_job(job_id, *, status: JobStatus, result=None, error: str | None = N
         s.add(j)
 
 
-def _handle_hunyuan_generate(job_id, payload: dict):
-    image_url = str(payload.get("image_url") or "").strip()
-    if not image_url:
-        raise RuntimeError("image_url is required")
-
-    quality = str(payload.get("quality") or "standard")
-    include_texture = bool(payload.get("include_texture", True))
-
-    raise RuntimeError(
-        "hunyuan.generate is not implemented yet. Implement RunPod submission/polling before enabling this job. "
-        f"Received image_url={image_url!r}, quality={quality!r}, include_texture={include_texture!r}"
-    )
-
-
-HANDLERS = {
-    "hunyuan.generate": _handle_hunyuan_generate,
-}
-
+# ── Main loop ─────────────────────────────────────────────────────────────────
 
 def run_forever():
-    # Ensure all tables (including `jobs`) exist before polling. The backend also
-    # runs create_all on startup, but the worker may start first in compose.
+    _backfill_legacy_output_dir()
     init_db()
     print("Roomtastic worker started. Polling DB for jobs...")
+
     while True:
         job_id = _claim_next_job()
         if not job_id:
             time.sleep(POLL_INTERVAL_SECONDS)
             continue
+
         try:
             with session_scope() as s:
                 j = s.get(Job, job_id)
@@ -101,12 +145,12 @@ def run_forever():
                     continue
                 handler = HANDLERS.get(j.type)
                 if not handler:
-                    raise RuntimeError(f"no handler for job type {j.type}")
+                    raise RuntimeError(f"No handler registered for job type '{j.type}'")
                 payload = j.payload or {}
             result = handler(job_id, payload)
-            _finish_job(job_id, status=JobStatus.succeeded, result=result, error=None)
+            _finish_job(job_id, status=JobStatus.succeeded, result=result)
         except Exception as e:
-            _finish_job(job_id, status=JobStatus.failed, result=None, error=str(e))
+            _finish_job(job_id, status=JobStatus.failed, error=str(e))
 
 
 if __name__ == "__main__":

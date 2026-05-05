@@ -2,15 +2,14 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MOCK_CATALOG } from "@/lib/mockCatalog";
 import { CM_TO_M } from "@/lib/gridSnap";
 import { canonicalModelUrlForLoader, isRecognizedModelUrl } from "@/lib/modelUrl";
 import { publicAssetUrl } from "@/lib/publicAssetUrl";
 import { queryKeys, useInventoryQuery } from "@/hooks/useRoomQueries";
-import { syncRoomLayout } from "@/services/rooms";
-import type { FurnitureOut, InventoryOut, RoomOut } from "@/types/api";
+import { createHunyuanGenerateJob, fetchJob, syncRoomLayout } from "@/services/rooms";
+import type { FurnitureOut, InventoryOut, JobOut, RoomOut } from "@/types/api";
 import { getErrorMessage } from "@/utils/errors";
 import { runAssistantMessage } from "./assistantCommands";
 import type { FloorDropBridge } from "./floorDropBridge";
@@ -23,7 +22,6 @@ import {
 } from "./placement";
 import type { FloorTextureId, WallTextureId } from "./proceduralTextures";
 import { DEFAULT_DOOR, DEFAULT_WINDOW, type RoomOpening, type WallKey } from "./roomOpenings";
-import { useGLTF } from "@react-three/drei";
 
 /**
  * Generates a unique ID for a new door or window opening.
@@ -58,14 +56,49 @@ function cssColorToHex(input: string): string {
 }
 
 type SidebarTab = "catalog" | "room" | "assistant";
+type GenerationStatus = "idle" | "submitting" | "running" | "succeeded" | "failed";
 
-/**
- * Finds the matching mock catalog item for a given GLB URL.
- * Normalizes URLs before comparison to handle path variations.
- */
-function mockCatalogMatchForUrl(glbUrl: string): (typeof MOCK_CATALOG)[number] | undefined {
-  const canon = canonicalModelUrlForLoader(glbUrl);
-  return MOCK_CATALOG.find((m) => canonicalModelUrlForLoader(publicAssetUrl(m.glbUrl)) === canon);
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function fileToBase64Data(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read the selected file."));
+    reader.onload = () => {
+      const raw = String(reader.result ?? "");
+      const payload = raw.includes(",") ? raw.split(",", 2)[1] : raw;
+      if (!payload) {
+        reject(new Error("Could not parse image data."));
+        return;
+      }
+      resolve(payload);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function InventoryListThumb({ item }: { item: InventoryOut }) {
+  if (item.thumbnail_url) {
+    return (
+      <Image
+        src={item.thumbnail_url}
+        alt={`${item.name} preview`}
+        width={56}
+        height={56}
+        unoptimized
+        sizes="56px"
+        className="h-14 w-14 shrink-0 rounded-lg border border-white/10 object-cover"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-slate-900/80 text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
+      3D
+    </div>
+  );
 }
 
 /**
@@ -95,7 +128,6 @@ function SelectionDetailsPanel({
     );
   }
 
-  const mockMatch = mockCatalogMatchForUrl(placement.glbUrl);
   const rotDeg = Math.round((placement.rotationY * 180) / Math.PI);
   const [px, py, pz] = placement.position;
 
@@ -151,11 +183,6 @@ function SelectionDetailsPanel({
               </div>
             ) : null}
           </dl>
-        ) : mockMatch ? (
-          <p className="text-xs text-slate-300">
-            Mock catalog: <span className="text-violet-200">{mockMatch.label}</span>
-            <span className="ml-1 text-slate-500">({mockMatch.id})</span>
-          </p>
         ) : (
           <p className="text-xs text-slate-300">Custom model (not from current inventory row)</p>
         )}
@@ -262,7 +289,6 @@ function SelectionDetailsPanel({
  * - Sync selected/secondary selected furniture for grouping operations
  * - Render 3D scene (EditorScene) + left/right sidebars with catalog, room settings, assistant chat
  * - Auto-save layout every ~1.1s (debounced) with conflict resolution
- * - Preload mock GLB models for instant drag/drop feedback
  * - Bridge between HTML UI and 3D canvas via refs (FloorDropBridge, SceneActions)
  * - Support doors/windows preview (not yet persisted to backend)
  *
@@ -284,17 +310,52 @@ export default function RoomEditorClient({
   initialInventory?: InventoryOut[];
 }) {
   const queryClient = useQueryClient();
-  const inventoryQuery = useInventoryQuery(token, initialInventory);
+  const userId = room.user_id;
 
-  const inventory = useMemo(() => inventoryQuery.data ?? [], [inventoryQuery.data]);
-  const inventoryLoading = inventoryQuery.isLoading && inventory.length === 0;
-  const inventoryError = inventoryQuery.error ? getErrorMessage(inventoryQuery.error) : null;
+  // User uploads: GET /inventory?user_id=<userId> — only this user's generated items.
+  const userInventoryQuery = useInventoryQuery(token, userId, initialInventory);
+  // Shared catalog: GET /inventory — all items in the table, no ownership filter.
+  const sharedInventoryQuery = useInventoryQuery(token);
 
+  const userInventory = useMemo(() => {
+    return [...(userInventoryQuery.data ?? [])].sort((a, b) => {
+      const aTs = Date.parse(a.updated_at ?? a.created_at ?? "");
+      const bTs = Date.parse(b.updated_at ?? b.created_at ?? "");
+      return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+    });
+  }, [userInventoryQuery.data]);
+
+  const sharedInventory = useMemo(() => {
+    return [...(sharedInventoryQuery.data ?? [])].sort((a, b) => {
+      const aTs = Date.parse(a.updated_at ?? a.created_at ?? "");
+      const bTs = Date.parse(b.updated_at ?? b.created_at ?? "");
+      return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+    });
+  }, [sharedInventoryQuery.data]);
+
+  // Combined map for resolving inventory-backed placement URLs (covers both sections).
   const invById = useMemo(() => {
     const m = new Map<string, InventoryOut>();
-    inventory.forEach((i) => m.set(i.inventory_id, i));
+    [...(userInventoryQuery.data ?? []), ...(sharedInventoryQuery.data ?? [])].forEach((i) =>
+      m.set(i.inventory_id, i),
+    );
     return m;
-  }, [inventory]);
+  }, [userInventoryQuery.data, sharedInventoryQuery.data]);
+
+  const inventoryLoading =
+    (userInventoryQuery.isLoading && userInventory.length === 0) ||
+    (sharedInventoryQuery.isLoading && sharedInventory.length === 0);
+  const inventoryError = userInventoryQuery.error
+    ? getErrorMessage(userInventoryQuery.error)
+    : sharedInventoryQuery.error
+      ? getErrorMessage(sharedInventoryQuery.error)
+      : null;
+
+  // Derive combined inventory list used for hydrating placement model URLs.
+  const inventory = useMemo(
+    () => [...userInventory, ...sharedInventory],
+    [userInventory, sharedInventory],
+  );
 
   const [placements, setPlacements] = useState<Placement[]>(() =>
     initialFurniture.map((f) => furnitureToPlacement(f, invById)),
@@ -328,12 +389,33 @@ export default function RoomEditorClient({
   const sceneActionsRef = useRef<RoomEditorSceneActions | null>(null);
   const hudWorldRef = useRef<HTMLSpanElement | null>(null);
   const hudPxRef = useRef<HTMLSpanElement | null>(null);
+  const [sceneReady, setSceneReady] = useState(false);
   const [openings, setOpenings] = useState<RoomOpening[]>(initialOpenings);
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  const [generateName, setGenerateName] = useState("Generated Item");
+  const [generateCategory, setGenerateCategory] = useState("custom");
+  const [generateDescription, setGenerateDescription] = useState("");
+  const [generateIncludeTexture, setGenerateIncludeTexture] = useState(true);
+  const [generateImageFile, setGenerateImageFile] = useState<File | null>(null);
+  const [generateImagePreviewUrl, setGenerateImagePreviewUrl] = useState<string | null>(null);
+  const [generationStatus, setGenerationStatus] = useState<GenerationStatus>("idle");
+  const [generationJobId, setGenerationJobId] = useState<string | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
 
   const placementsRef = useRef<Placement[]>(placements);
   placementsRef.current = placements;
   const openingsRef = useRef<RoomOpening[]>(openings);
   openingsRef.current = openings;
+
+  useEffect(() => {
+    return () => {
+      if (generateImagePreviewUrl) URL.revokeObjectURL(generateImagePreviewUrl);
+    };
+  }, [generateImagePreviewUrl]);
+
+  useEffect(() => {
+    setSceneReady(true);
+  }, []);
 
   // Inventory rows can load after editor mount; hydrate model URLs for inventory-backed pieces.
   useEffect(() => {
@@ -384,12 +466,6 @@ export default function RoomEditorClient({
   }, [invById, selectedPlacement]);
 
   useEffect(() => {
-    MOCK_CATALOG.forEach((m) => {
-      useGLTF.preload(publicAssetUrl(m.glbUrl));
-    });
-  }, []);
-
-  useEffect(() => {
     const end = () => {
       setCatalogDragging(false);
       setDropHover(null);
@@ -421,12 +497,6 @@ export default function RoomEditorClient({
     },
     [],
   );
-
-  const addMockClick = (glbUrlAbs: string, label: string) => {
-    const p = newPlacementFromCatalog({ glbUrl: glbUrlAbs, label, inventoryId: null, x: 0, z: 0 });
-    setPlacements((prev) => [...prev, p]);
-    setSelectedId(p.clientId);
-  };
 
   const saveLayoutMutation = useMutation({
     mutationFn: async () => {
@@ -510,6 +580,72 @@ export default function RoomEditorClient({
     },
   });
 
+  const submitGenerationMutation = useMutation({
+    mutationFn: async () => {
+      if (!generateImageFile) {
+        throw new Error("Please choose an image first.");
+      }
+
+      setGenerationError(null);
+      setGenerationStatus("submitting");
+      setGenerationJobId(null);
+
+      const imageBase64 = await fileToBase64Data(generateImageFile);
+      const createRes = await createHunyuanGenerateJob(token, {
+        image_base64: imageBase64,
+        image_mime: generateImageFile.type || null,
+        inventory_name: generateName.trim() || "Generated Item",
+        inventory_category: generateCategory.trim() || "custom",
+        inventory_description: generateDescription.trim() || null,
+        include_texture: generateIncludeTexture,
+        tags: ["upload", "hunyuan"],
+        user_id: userId,
+      });
+
+      setGenerationJobId(createRes.job_id);
+      setGenerationStatus(
+        createRes.status === "failed"
+          ? "failed"
+          : createRes.status === "succeeded"
+            ? "succeeded"
+            : "running",
+      );
+
+      let latest: JobOut = createRes;
+      const deadline = Date.now() + 1000 * 60 * 25;
+      while (latest.status === "pending" || latest.status === "running") {
+        if (Date.now() > deadline) {
+          throw new Error("Generation timed out. Please try again.");
+        }
+        await sleep(2500);
+        latest = await fetchJob(createRes.job_id, token);
+        setGenerationStatus(
+          latest.status === "failed"
+            ? "failed"
+            : latest.status === "succeeded"
+              ? "succeeded"
+              : "running",
+        );
+      }
+
+      if (latest.status !== "succeeded") {
+        throw new Error(latest.error || "Generation failed.");
+      }
+      return latest;
+    },
+    onSuccess: async () => {
+      setGenerationStatus("succeeded");
+      setGenerationError(null);
+      await queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      setIsGenerateModalOpen(false);
+      onPickGenerationImage(null);
+    },
+    onError: (err: unknown) => {
+      setGenerationStatus("failed");
+      setGenerationError(getErrorMessage(err));
+    },
+  });
+
   const persistLayoutToServer = useCallback(async () => {
     if (saveBusyRef.current) {
       saveQueuedRef.current = true;
@@ -555,12 +691,9 @@ export default function RoomEditorClient({
   }, [placements, openings, wallColorHex, persistLayoutToServer]);
 
   const addInventoryClick = (item: InventoryOut) => {
-    const raw =
-      item.model_url && (item.model_url.endsWith(".glb") || item.model_url.endsWith(".gltf"))
-        ? item.model_url
-        : "/mock-models/table.glb";
+    if (!item.model_url) return;
     const p = newPlacementFromCatalog({
-      glbUrl: publicAssetUrl(raw),
+      glbUrl: publicAssetUrl(item.model_url),
       label: item.name,
       inventoryId: item.inventory_id,
       x: 0,
@@ -568,6 +701,18 @@ export default function RoomEditorClient({
     });
     setPlacements((prev) => [...prev, p]);
     setSelectedId(p.clientId);
+  };
+
+  const onPickGenerationImage = (file: File | null) => {
+    if (generateImagePreviewUrl) {
+      URL.revokeObjectURL(generateImagePreviewUrl);
+    }
+    setGenerateImageFile(file);
+    if (!file) {
+      setGenerateImagePreviewUrl(null);
+      return;
+    }
+    setGenerateImagePreviewUrl(URL.createObjectURL(file));
   };
 
   return (
@@ -625,54 +770,56 @@ export default function RoomEditorClient({
             <p className="text-xs text-indigo-300/80">
               Drag into the room or click to add at center.
             </p>
-            <div>
-              <h3 className="rt-editor-heading mb-2 text-violet-400/90">Mock GLBs</h3>
-              <div className="space-y-2">
-                {MOCK_CATALOG.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    draggable
-                    onDragStart={(e) => {
-                      const url = publicAssetUrl(m.glbUrl);
-                      e.dataTransfer.setData("modelUrl", url);
-                      e.dataTransfer.setData("text/plain", url);
-                      e.dataTransfer.setData("label", m.label);
-                      e.dataTransfer.effectAllowed = "copy";
-                      setCatalogDragging(true);
-                      setDragModelUrl(url);
-                    }}
-                    onClick={() => addMockClick(publicAssetUrl(m.glbUrl), m.label)}
-                    className={`w-full rounded-xl border border-white/10 px-3 py-3 text-left ${m.accent} flex items-center gap-3 transition hover:border-violet-400/50 hover:bg-white/5`}
-                  >
-                    <span className="h-10 w-10 rounded-lg border border-violet-500/30 bg-slate-900/80" />
-                    <span className="text-sm font-medium text-white">{m.label}</span>
-                  </button>
-                ))}
-              </div>
+            <div className="rounded-xl border border-violet-500/30 bg-violet-950/35 p-3">
+              <button
+                type="button"
+                onClick={() => setIsGenerateModalOpen(true)}
+                className="w-full rounded-lg border border-violet-300/30 bg-violet-600/90 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-500"
+              >
+                Generate 3D From Image
+              </button>
+              <p className="mt-2 text-[11px] leading-relaxed text-violet-200/90">
+                Creates a GLB and adds it to inventory. It will appear first once ready.
+              </p>
+              {generationStatus !== "idle" ? (
+                <div className="mt-2 rounded-md border border-white/10 bg-slate-950/45 px-2.5 py-2 text-[11px]">
+                  <p className="font-medium text-slate-100">
+                    Status:{" "}
+                    <span className="capitalize">
+                      {generationStatus === "running"
+                        ? "running"
+                        : generationStatus === "submitting"
+                          ? "submitting"
+                          : generationStatus}
+                    </span>
+                  </p>
+                  {generationJobId ? (
+                    <p className="mt-0.5 font-mono text-[10px] text-slate-400">Job {generationJobId}</p>
+                  ) : null}
+                  {generationError ? (
+                    <p className="mt-1 text-red-300/90">{generationError}</p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <div>
-              <h3 className="rt-editor-heading mb-2 text-sky-400/90">Inventory</h3>
+              <h3 className="rt-editor-heading mb-2 text-emerald-400/90">User Inventory</h3>
               {inventoryLoading ? (
                 <p className="text-xs text-slate-500">Loading inventory...</p>
               ) : inventoryError ? (
                 <p className="text-xs text-red-300/90">{inventoryError}</p>
-              ) : inventory.length === 0 ? (
-                <p className="text-xs text-slate-500">No inventory rows yet.</p>
+              ) : userInventory.length === 0 ? (
+                <p className="text-xs text-slate-500">No uploaded inventory yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {inventory.slice(0, 40).map((item) => (
+                  {userInventory.slice(0, 40).map((item) => (
                     <button
                       key={item.inventory_id}
                       type="button"
                       draggable
                       onDragStart={(e) => {
-                        const raw =
-                          item.model_url &&
-                          (item.model_url.endsWith(".glb") || item.model_url.endsWith(".gltf"))
-                            ? item.model_url
-                            : "/mock-models/table.glb";
-                        const url = publicAssetUrl(raw);
+                        if (!item.model_url) return;
+                        const url = publicAssetUrl(item.model_url);
                         e.dataTransfer.setData("modelUrl", url);
                         e.dataTransfer.setData("text/plain", url);
                         e.dataTransfer.setData("label", item.name);
@@ -682,10 +829,56 @@ export default function RoomEditorClient({
                         setDragModelUrl(url);
                       }}
                       onClick={() => addInventoryClick(item)}
-                      className="w-full rounded-xl border border-white/10 bg-sky-950/20 px-3 py-2 text-left transition hover:border-sky-400/40"
+                      className="flex w-full items-center gap-3 rounded-xl border border-emerald-500/35 bg-emerald-950/25 px-3 py-2 text-left transition hover:border-emerald-300/50"
                     >
-                      <div className="text-sm font-medium text-white">{item.name}</div>
-                      <div className="text-xs text-slate-400">{item.category ?? "—"}</div>
+                      <InventoryListThumb item={item} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="truncate text-sm font-medium text-white">{item.name}</div>
+                        </div>
+                        <div className="truncate text-xs text-slate-300">
+                          {item.category ?? "uploaded"}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <h3 className="rt-editor-heading mb-2 text-sky-400/90">Shared Catalog Inventory</h3>
+              {inventoryLoading ? (
+                <p className="text-xs text-slate-500">Loading inventory...</p>
+              ) : inventoryError ? (
+                <p className="text-xs text-red-300/90">{inventoryError}</p>
+              ) : sharedInventory.length === 0 ? (
+                <p className="text-xs text-slate-500">No shared inventory rows yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {sharedInventory.slice(0, 40).map((item) => (
+                    <button
+                      key={item.inventory_id}
+                      type="button"
+                      draggable
+                      onDragStart={(e) => {
+                        if (!item.model_url) return;
+                        const url = publicAssetUrl(item.model_url);
+                        e.dataTransfer.setData("modelUrl", url);
+                        e.dataTransfer.setData("text/plain", url);
+                        e.dataTransfer.setData("label", item.name);
+                        e.dataTransfer.setData("inventoryId", item.inventory_id);
+                        e.dataTransfer.effectAllowed = "copy";
+                        setCatalogDragging(true);
+                        setDragModelUrl(url);
+                      }}
+                      onClick={() => addInventoryClick(item)}
+                      className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-sky-950/20 px-3 py-2 text-left transition hover:border-sky-400/40"
+                    >
+                      <InventoryListThumb item={item} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-white">{item.name}</div>
+                        <div className="truncate text-xs text-slate-400">{item.category ?? "—"}</div>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -1014,30 +1207,32 @@ export default function RoomEditorClient({
           </div>
         )}
         <div className="relative min-h-0 flex-1">
-          <EditorScene
-            roomW={widthM}
-            roomL={lengthM}
-            roomH={heightM}
-            floorColorHex={floorColorHex}
-            wallColorHex={wallColorHex}
-            floorTexturePreset={floorTexturePreset}
-            wallTexturePreset={wallTexturePreset}
-            floorDropBridgeRef={floorDropBridgeRef}
-            sceneActionsRef={sceneActionsRef}
-            dragModelUrl={catalogDragging ? dragModelUrl : null}
-            dropHover={dropHover}
-            placements={placements}
-            setPlacements={setPlacements}
-            selectedId={selectedId}
-            setSelectedId={setSelectedId}
-            secondarySelectedId={secondarySelectedId}
-            setSecondarySelectedId={setSecondarySelectedId}
-            transformMode={mode}
-            onInterference={onEditorInterference}
-            openings={openings}
-            hudWorldRef={hudWorldRef}
-            hudPxRef={hudPxRef}
-          />
+          {sceneReady ? (
+            <EditorScene
+              roomW={widthM}
+              roomL={lengthM}
+              roomH={heightM}
+              floorColorHex={floorColorHex}
+              wallColorHex={wallColorHex}
+              floorTexturePreset={floorTexturePreset}
+              wallTexturePreset={wallTexturePreset}
+              floorDropBridgeRef={floorDropBridgeRef}
+              sceneActionsRef={sceneActionsRef}
+              dragModelUrl={catalogDragging ? dragModelUrl : null}
+              dropHover={dropHover}
+              placements={placements}
+              setPlacements={setPlacements}
+              selectedId={selectedId}
+              setSelectedId={setSelectedId}
+              secondarySelectedId={secondarySelectedId}
+              setSecondarySelectedId={setSecondarySelectedId}
+              transformMode={mode}
+              onInterference={onEditorInterference}
+              openings={openings}
+              hudWorldRef={hudWorldRef}
+              hudPxRef={hudPxRef}
+            />
+          ) : null}
           <div className="pointer-events-none absolute bottom-3 left-3 z-[100] max-w-[min(42vw,240px)] rounded-xl border border-white/[0.08] bg-slate-950/80 px-3 py-2 text-[10px] font-medium text-slate-300 shadow-xl ring-1 shadow-black/40 ring-white/[0.05] backdrop-blur-md">
             <span className="font-sans text-slate-500">World </span>
             <span ref={hudWorldRef} className="font-mono text-violet-200/95 tabular-nums">
@@ -1109,6 +1304,120 @@ export default function RoomEditorClient({
           />
         </div>
       </aside>
+
+      {isGenerateModalOpen ? (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-white/15 bg-slate-900/95 p-4 shadow-2xl ring-1 ring-white/10">
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-base font-semibold tracking-tight text-white">
+                  Generate 3D Upload
+                </h2>
+                <p className="mt-1 text-xs text-slate-300">
+                  Upload one image. We will run Hunyuan and add the result to inventory.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsGenerateModalOpen(false)}
+                className="rounded-md border border-white/10 px-2 py-1 text-xs text-slate-300 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="block text-xs text-slate-300">
+                Name
+                <input
+                  value={generateName}
+                  onChange={(e) => setGenerateName(e.target.value)}
+                  placeholder="Generated Item"
+                  className="mt-1 w-full rounded-lg border border-white/15 bg-slate-950/70 px-2.5 py-2 text-sm text-white placeholder:text-slate-500"
+                />
+              </label>
+
+              <label className="block text-xs text-slate-300">
+                Category
+                <input
+                  value={generateCategory}
+                  onChange={(e) => setGenerateCategory(e.target.value)}
+                  placeholder="custom"
+                  className="mt-1 w-full rounded-lg border border-white/15 bg-slate-950/70 px-2.5 py-2 text-sm text-white placeholder:text-slate-500"
+                />
+              </label>
+
+              <label className="block text-xs text-slate-300">
+                Description (optional)
+                <textarea
+                  value={generateDescription}
+                  onChange={(e) => setGenerateDescription(e.target.value)}
+                  rows={3}
+                  placeholder="What is this item?"
+                  className="mt-1 w-full rounded-lg border border-white/15 bg-slate-950/70 px-2.5 py-2 text-sm text-white placeholder:text-slate-500"
+                />
+              </label>
+
+              <label className="block text-xs text-slate-300">
+                Image
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => onPickGenerationImage(e.target.files?.[0] ?? null)}
+                  className="mt-1 block w-full cursor-pointer rounded-lg border border-white/15 bg-slate-950/70 px-2 py-2 text-xs text-slate-200 file:mr-2 file:rounded-md file:border-0 file:bg-violet-600 file:px-2 file:py-1 file:text-white hover:file:bg-violet-500"
+                />
+              </label>
+
+              {generateImagePreviewUrl ? (
+                <Image
+                  src={generateImagePreviewUrl}
+                  alt="Selected upload preview"
+                  width={640}
+                  height={320}
+                  unoptimized
+                  className="h-36 w-full rounded-lg border border-white/10 object-cover"
+                />
+              ) : null}
+
+              <label className="flex items-center gap-2 text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={generateIncludeTexture}
+                  onChange={(e) => setGenerateIncludeTexture(e.target.checked)}
+                  className="h-4 w-4 accent-violet-500"
+                />
+                Include texture generation
+              </label>
+
+              {generationError ? (
+                <p className="rounded-md border border-red-500/40 bg-red-950/35 px-2.5 py-2 text-xs text-red-200">
+                  {generationError}
+                </p>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsGenerateModalOpen(false)}
+                  className="rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-300 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={submitGenerationMutation.isPending}
+                  onClick={() => {
+                    void submitGenerationMutation.mutateAsync();
+                  }}
+                  className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 hover:bg-violet-500"
+                >
+                  {submitGenerationMutation.isPending ? "Generating..." : "Start Generation"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

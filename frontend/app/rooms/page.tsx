@@ -3,15 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { clearAuth, getStoredUser, getToken, type StoredUser } from "@/lib/auth";
+import { clearAuth, useClientToken, useClientUser } from "@/lib/auth";
 import { useCreateRoomMutation, useUserRoomsQuery } from "@/hooks/useRoomQueries";
 import { getErrorMessage } from "@/utils/errors";
 import type { CreateRoomInput } from "@/types/api";
-
-type RoomsAuthState = {
-  token: string;
-  user: StoredUser;
-};
 
 const DEFAULT_ROOM_PAYLOAD = {
   width: 400,
@@ -25,17 +20,12 @@ export default function RoomsPage() {
   const router = useRouter();
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const auth = useMemo<RoomsAuthState | null>(() => {
-    const token = getToken();
-    const user = getStoredUser();
-    if (!token || !user) return null;
-    return { token, user };
-  }, []);
+  const token = useClientToken();
+  const user = useClientUser();
+  const auth = token && user ? { token, user } : null;
 
   useEffect(() => {
-    if (!auth) {
-      router.push("/login");
-    }
+    if (!auth) router.push("/login");
   }, [auth, router]);
 
   const session = useMemo(
@@ -51,9 +41,16 @@ export default function RoomsPage() {
   });
 
   const loading = !!auth && roomsQuery.isLoading;
-
   const rooms = roomsQuery.data ?? [];
   const error = createError ?? (roomsQuery.error ? getErrorMessage(roomsQuery.error) : null);
+
+  if (!auth) {
+    return (
+      <div className="rt-app-shell min-h-screen p-6 text-sm text-indigo-200">
+        Redirecting to login...
+      </div>
+    );
+  }
 
   const handleCreateRoom = () => {
     if (!session) {
@@ -69,14 +66,6 @@ export default function RoomsPage() {
       onError: (e) => setCreateError(getErrorMessage(e)),
     });
   };
-
-  if (!auth) {
-    return (
-      <div className="rt-app-shell min-h-screen p-6 text-sm text-indigo-200">
-        Redirecting to login...
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-950 p-6 text-slate-100">

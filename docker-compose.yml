@@ -18,6 +18,8 @@ services:
     environment:
       - DATABASE_URL=postgresql+psycopg://roomtastic:roomtastic@db:5432/roomtastic
       - PYTHONUNBUFFERED=1
+      - HUNYUAN_SYNC_TIMEOUT_SECONDS=${HUNYUAN_SYNC_TIMEOUT_SECONDS:-900}
+      - HUNYUAN_SYNC_POLL_SECONDS=${HUNYUAN_SYNC_POLL_SECONDS:-2}
     ports:
       - "8000:8000"
     depends_on:
@@ -26,7 +28,7 @@ services:
 
   frontend:
     build: ./frontend
-    command: npm run dev
+    command: npm run dev -- --webpack
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -54,6 +56,14 @@ services:
       - DATABASE_URL=postgresql+psycopg://roomtastic:roomtastic@db:5432/roomtastic
       - BACKEND_PATH=/backend
       - PYTHONUNBUFFERED=1
+      - RUNPOD_ENDPOINT_ID=${RUNPOD_ENDPOINT_ID}
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
+      - RUNPOD_API_BASE=${RUNPOD_API_BASE:-https://api.runpod.ai}
+      - RUNPOD_STATUS_POLL_SECONDS=${RUNPOD_STATUS_POLL_SECONDS:-10}
+      - RUNPOD_MAX_WAIT_SECONDS=${RUNPOD_MAX_WAIT_SECONDS:-1800}
+      - RUNPOD_HTTP_TIMEOUT_SECONDS=${RUNPOD_HTTP_TIMEOUT_SECONDS:-120}
+      - HUNYUAN_OUTPUT_DIR=${HUNYUAN_OUTPUT_DIR:-/backend/glb_models}
+      - PUBLIC_BACKEND_URL=${PUBLIC_BACKEND_URL:-http://localhost:8000}
     depends_on:
       - redis
       - db

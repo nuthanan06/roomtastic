@@ -10,9 +10,11 @@ export type AssistantContext = {
   selectedId: string | null;
 };
 
+// ─── Public entry point ─────────────────────────────────────────────────────
+
 /**
- * Primary assistant entrypoint.
- * Handles high-level room-edit commands and delegates parsing to helper functions below.
+ * Primary assistant entry point called from the chat input in RoomEditorClient.
+ * Routes the raw text command to the matching action and returns a reply string.
  */
 export function runAssistantMessage(raw: string, ctx: AssistantContext): string {
   const t = raw.trim().toLowerCase();
@@ -146,7 +148,9 @@ export function runAssistantMessage(raw: string, ctx: AssistantContext): string 
   return "I did not catch that - type help for a list.";
 }
 
-/** Snap only root pieces so attachments keep local offsets under parents. */
+// ─── Action helpers ─────────────────────────────────────────────────────────
+
+/** Snaps only root pieces to the grid; leaves child local offsets untouched. */
 function snapRootsXZ(
   setPlacements: AssistantContext["setPlacements"],
   filter: (p: Placement) => boolean,
@@ -163,23 +167,16 @@ function snapRootsXZ(
   return n;
 }
 
-/** Rough stacked height for a root piece (matches default collision footprint). */
+/** Estimates the stacking Y offset for a root piece (matches default collision footprint). */
 function approxStackHeightM(p: Placement): number {
   return DEFAULT_MODEL_FOOTPRINT.yTop * p.scale + 0.02;
 }
 
-function findRootByLabel(placements: Placement[], query: string): Placement | undefined {
-  const q = cleanLabelPhrase(query).toLowerCase();
-  if (!q) return undefined;
-  const roots = placements.filter((p) => !p.parentClientId);
-  const exact = roots.find((p) => p.label.trim().toLowerCase() === q);
-  if (exact) return exact;
-  return roots.find((p) => p.label.toLowerCase().includes(q));
-}
+// ─── Parsing helpers ────────────────────────────────────────────────────────
 
 /**
- * Parse "place A and B together ... vertically" / stack / align variants.
- * First name = bottom/base, second = piece stacked on top.
+ * Parses "place A and B together", "stack A on B", "vertically align A and B" and similar.
+ * First captured name = bottom/base, second = piece stacked on top.
  */
 function parseVerticalStackPair(raw: string): { labelA: string; labelB: string } | null {
   const t = raw.trim();
@@ -204,7 +201,19 @@ function parseVerticalStackPair(raw: string): { labelA: string; labelB: string }
   return null;
 }
 
-/** Trim trailing conversational fluff from captured name phrases. */
+/** Finds an ungrouped root piece whose label exactly matches or contains the query string. */
+function findRootByLabel(placements: Placement[], query: string): Placement | undefined {
+  const q = cleanLabelPhrase(query).toLowerCase();
+  if (!q) return undefined;
+  const roots = placements.filter((p) => !p.parentClientId);
+  const exact = roots.find((p) => p.label.trim().toLowerCase() === q);
+  if (exact) return exact;
+  return roots.find((p) => p.label.toLowerCase().includes(q));
+}
+
+// ─── String utilities ────────────────────────────────────────────────────────
+
+/** Strips trailing conversational filler from a captured name phrase. */
 function cleanLabelPhrase(s: string): string {
   return stripWrappingQuotes(
     s
@@ -213,6 +222,7 @@ function cleanLabelPhrase(s: string): string {
   );
 }
 
+/** Removes surrounding quotes or braces left by regex captures. */
 function stripWrappingQuotes(s: string): string {
   return s
     .trim()

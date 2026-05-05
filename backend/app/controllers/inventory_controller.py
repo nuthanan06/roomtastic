@@ -22,8 +22,11 @@ def _normalize_tags(raw: list[str] | None) -> list[str]:
     return out
 
 
-def list_inventory(db: Session) -> list:
-    return db.query(Inventory).order_by(Inventory.updated_at.desc()).all()
+def list_inventory(db: Session, user_id: UUID | None = None) -> list:
+    q = db.query(Inventory)
+    if user_id is not None:
+        q = q.filter(Inventory.user_id == user_id)
+    return q.order_by(Inventory.updated_at.desc()).all()
 
 
 def get_inventory(db: Session, inventory_id: UUID) -> Inventory:
@@ -35,10 +38,16 @@ def get_inventory(db: Session, inventory_id: UUID) -> Inventory:
 
 def create_inventory(db: Session, inventory_in: InventoryCreate) -> Inventory:
     now = datetime.utcnow()
-    payload = inventory_in.model_dump()
-    payload["tags"] = _normalize_tags(payload.get("tags"))
     inv = Inventory(
-        **payload,
+        name=inventory_in.name or "Untitled",
+        category=inventory_in.category,
+        user_id=inventory_in.user_id,
+        width=inventory_in.width,
+        length=inventory_in.length,
+        height=inventory_in.height,
+        model_url=inventory_in.model_url,
+        description=inventory_in.description,
+        tags=_normalize_tags(inventory_in.tags),
         created_at=now,
         updated_at=now,
     )

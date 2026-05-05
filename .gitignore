@@ -45,6 +45,7 @@ temp/
 depth_cache/
 uploads/
 *.db
+backend/glb_models/
 
 # Go
 *.exe

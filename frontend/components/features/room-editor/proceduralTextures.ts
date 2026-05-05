@@ -3,7 +3,12 @@ import * as THREE from "three";
 export type FloorTextureId = "matte" | "wood" | "tile" | "concrete";
 export type WallTextureId = "paint" | "plaster" | "brick" | "wood_panel" | "fabric";
 
-/** Primary floor texture factory used by EditorScene floor material wiring. */
+// ─── Public texture factories ───────────────────────────────────────────────
+
+/**
+ * Generates a canvas-based detail map for the floor material.
+ * Returns null for "matte" (plain colour, no texture needed).
+ */
 export function createFloorDetailMap(preset: FloorTextureId): THREE.CanvasTexture | null {
   if (preset === "matte") return null;
 
@@ -40,7 +45,10 @@ export function createFloorDetailMap(preset: FloorTextureId): THREE.CanvasTextur
   return tex;
 }
 
-/** Primary wall texture factory used by EditorScene wall materials. */
+/**
+ * Generates a canvas-based detail map for wall materials.
+ * Returns null for "paint" (plain colour, no texture needed).
+ */
 export function createWallDetailMap(preset: WallTextureId): THREE.CanvasTexture | null {
   if (preset === "paint") return null;
 
@@ -83,7 +91,9 @@ export function createWallDetailMap(preset: WallTextureId): THREE.CanvasTexture 
   });
 }
 
-/** Shared canvas->texture utility for procedural floor/wall maps. */
+// ─── Private helper ─────────────────────────────────────────────────────────
+
+/** Creates a canvas, runs the draw callback, and wraps the result in a tiled THREE.CanvasTexture. */
 function makeCanvasTexture(
   draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void,
   w = 256,

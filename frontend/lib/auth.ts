@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from "react";
+
 export type StoredUser = {
   user_id: string;
   first_name: string;
@@ -23,13 +25,32 @@ export function clearAuth() {
   localStorage.removeItem(USER_KEY);
 }
 
+// useSyncExternalStore requires a stable reference from getSnapshot.
+// Cache by raw JSON string so the same object is returned when nothing changed.
+let _cachedUserJson: string | null = null;
+let _cachedUser: StoredUser | null = null;
+
 export function getStoredUser(): StoredUser | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem(USER_KEY);
-  if (!raw) return null;
+  if (raw === _cachedUserJson) return _cachedUser;
+  _cachedUserJson = raw;
+  if (!raw) { _cachedUser = null; return null; }
   try {
-    return JSON.parse(raw) as StoredUser;
+    _cachedUser = JSON.parse(raw) as StoredUser;
   } catch {
-    return null;
+    _cachedUser = null;
   }
+  return _cachedUser;
+}
+
+const _noop = () => () => {};
+const _serverNull = () => null;
+
+export function useClientToken(): string | null {
+  return useSyncExternalStore(_noop, getToken, _serverNull);
+}
+
+export function useClientUser(): StoredUser | null {
+  return useSyncExternalStore(_noop, getStoredUser, _serverNull);
 }

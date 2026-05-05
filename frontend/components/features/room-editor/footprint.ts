@@ -4,11 +4,14 @@ import { normalizeClonedGltfRoot } from "./modelFit";
 
 export type ModelFootprint = { hx: number; hz: number; yTop: number };
 
+/** Fallback footprint used when a GLB has not been loaded yet. */
 export const DEFAULT_MODEL_FOOTPRINT: ModelFootprint = { hx: 0.45, hz: 0.45, yTop: 0.9 };
 
+// ─── Public utilities ───────────────────────────────────────────────────────
+
 /**
- * Primary footprint extractor.
- * Matches the same normalize step used when rendering, so collision math stays consistent.
+ * Extracts the AABB-based footprint from a loaded GLB scene.
+ * Applies the same normalization used during rendering so collision math stays consistent.
  */
 export function footprintFromGltfScene(scene: THREE.Object3D): ModelFootprint {
   const root = scene.clone(true);
@@ -20,8 +23,8 @@ export function footprintFromGltfScene(scene: THREE.Object3D): ModelFootprint {
 }
 
 /**
- * Primary grid-preview helper.
- * Returns snapped cell centers that intersect the footprint rectangle in X/Z.
+ * Returns the grid cell centers covered by a footprint rectangle.
+ * Used by EditorScene to render the drop-target highlight overlay.
  */
 export function collectFootprintCellCenters(
   cx: number,

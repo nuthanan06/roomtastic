@@ -1,11 +1,14 @@
 import * as THREE from "three";
 
-/** Typical furniture-ish target size in meters so tiny GLBs read correctly in editor scale. */
+/** Typical furniture target size in meters so tiny GLBs read correctly at editor scale. */
 const DEFAULT_TARGET_MAX_DIM = 0.9;
 
+// ─── Public utility ─────────────────────────────────────────────────────────
+
 /**
- * Primary normalization utility used after loading any GLB clone.
- * Uniformly scales model then lifts it so its bottom sits on y=0 in parent space.
+ * Normalizes a cloned GLB root in-place: uniformly scales it to fit DEFAULT_TARGET_MAX_DIM
+ * then lifts it so its bottom sits at y=0 in parent space.
+ * Called by both the scene renderer and footprint extractor so both use the same scale.
  */
 export function normalizeClonedGltfRoot(
   root: THREE.Object3D,
